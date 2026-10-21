@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Tv, Lock, User as UserIcon, AlertCircle } from 'lucide-react';
+import { Tv, Lock, User as UserIcon, AlertCircle, ArrowRight } from 'lucide-react';
 import { api } from '../api';
 import { User } from '../types';
 
@@ -18,12 +18,16 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     try {
       setLoading(true);
       setError(null);
-      const data = await api.login({ username, password });
+      const data = await api.login({ username: username.trim(), password });
       localStorage.setItem('signage_auth_token', data.token);
       localStorage.setItem('signage_user', JSON.stringify(data.user));
       onLoginSuccess(data.user, data.token);
     } catch (err: any) {
-      setError(err.message || 'Giriş yapılamadı.');
+      if (err.message && err.message.includes('fetch')) {
+        setError('Sunucuya bağlanılamadı. Lütfen sunucunun çalıştığını ve ağ bağlantınızı kontrol edin.');
+      } else {
+        setError(err.message || 'Kullanıcı adı veya parola hatalı.');
+      }
     } finally {
       setLoading(false);
     }
@@ -37,11 +41,11 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
             <Tv className="w-8 h-8" />
           </div>
           <h2 className="text-xl font-bold text-white tracking-wide">Dijital Bilgi Ekranı</h2>
-          <p className="text-xs text-slate-400 mt-1">Yönetici Paneli Oturum Açma</p>
+          <p className="text-xs text-slate-400 mt-1">Merkezi Yönetici Paneli Oturumu</p>
         </div>
 
         {error && (
-          <div className="mb-4 flex items-center gap-2 p-3 text-xs text-red-400 bg-red-950/50 border border-red-800/60 rounded-lg">
+          <div className="mb-4 flex items-center gap-2.5 p-3.5 text-xs text-rose-400 bg-rose-950/50 border border-rose-800/60 rounded-xl leading-relaxed">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{error}</span>
           </div>
@@ -49,30 +53,35 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1.5">Kullanıcı Adı</label>
+            <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              Kullanıcı Adı <span className="text-rose-400">*</span>
+            </label>
             <div className="relative">
-              <UserIcon className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+              <UserIcon className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
               <input
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 required
-                className="w-full pl-9 pr-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-sky-500"
+                className="input-standard pl-10"
                 placeholder="admin"
+                autoFocus
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1.5">Parola</label>
+            <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              Parola <span className="text-rose-400">*</span>
+            </label>
             <div className="relative">
-              <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+              <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="w-full pl-9 pr-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-sky-500"
+                className="input-standard pl-10 font-mono"
                 placeholder="••••••••"
               />
             </div>
@@ -82,13 +91,23 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-2.5 px-4 rounded-lg text-xs font-semibold bg-sky-600 hover:bg-sky-500 text-white transition disabled:opacity-50 shadow-md shadow-sky-600/30"
+              className="w-full btn-primary min-h-[44px]"
             >
-              {loading ? 'Giriş Yapılıyor...' : 'Giriş Yap'}
+              {loading ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Giriş Yapılıyor...
+                </>
+              ) : (
+                <>
+                  Yönetici Paneline Giriş Yap
+                  <ArrowRight className="w-4 h-4 ml-1" />
+                </>
+              )}
             </button>
           </div>
 
-          <div className="mt-4 p-3 rounded-lg bg-slate-950/60 border border-slate-800 text-[11px] text-slate-400 text-center">
+          <div className="mt-5 p-3.5 rounded-xl bg-slate-950/70 border border-slate-800/80 text-xs text-slate-400 text-center">
             Varsayılan Yerel Giriş: <span className="text-sky-400 font-mono font-bold">admin</span> / <span className="text-sky-400 font-mono font-bold">admin123</span>
           </div>
         </form>

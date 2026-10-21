@@ -179,8 +179,17 @@ async function run10ScreenSimulation() {
     console.log('========================================================\n');
 
   } finally {
+    console.log('Simülasyon test ekranları veritabanından temizleniyor...');
     for (const tv of simulatedTVs) {
-      if (tv.ws) tv.ws.close();
+      if (tv.ws) {
+        try { tv.ws.close(); } catch {}
+      }
+      if (tv.screenId) {
+        try {
+          await prisma.assignment.deleteMany({ where: { screenId: tv.screenId } });
+          await prisma.screen.delete({ where: { id: tv.screenId } });
+        } catch {}
+      }
     }
     server.close();
   }

@@ -111,11 +111,54 @@ async function testApi() {
     assert.strictEqual(hbRes.status, 200);
     console.log('✓ Test 5 Başarılı: Heartbeat alındı ve ekran durumu ONLINE güncellendi.');
 
+    // 7. Media creation and update test
+    console.log('Test 6: Medya oluşturma ve güncelleme (PUT /api/media/:id)...');
+    const createMediaRes = await fetch(`${baseUrl}/api/media/url`, {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({
+        title: 'Eski Web Sayfası Başlığı',
+        url: 'https://ornek.yerel.lan/eski',
+        duration: 10
+      })
+    });
+    assert.strictEqual(createMediaRes.status, 201);
+    const createdMedia = (await createMediaRes.json()) as any;
+    assert.strictEqual(createdMedia.title, 'Eski Web Sayfası Başlığı');
+
+    // Update media title, url and duration
+    const updateMediaRes = await fetch(`${baseUrl}/api/media/${createdMedia.id}`, {
+      method: 'PUT',
+      headers: authHeaders,
+      body: JSON.stringify({
+        title: 'Yeni Güncel Web Sayfası Başlığı',
+        url: 'https://ornek.yerel.lan/yeni',
+        duration: 25
+      })
+    });
+    assert.strictEqual(updateMediaRes.status, 200);
+    const updatedMedia = (await updateMediaRes.json()) as any;
+    assert.strictEqual(updatedMedia.title, 'Yeni Güncel Web Sayfası Başlığı');
+    assert.strictEqual(updatedMedia.url, 'https://ornek.yerel.lan/yeni');
+    assert.strictEqual(updatedMedia.duration, 25);
+    console.log('✓ Test 6 Başarılı: Medya başlığı, süresi ve URL bilgisi başarıyla güncellendi.');
+
+    // Cleanup test media
+    await fetch(`${baseUrl}/api/media/${createdMedia.id}`, {
+      method: 'DELETE',
+      headers: authHeaders
+    });
+
     console.log('====================================================');
     console.log(' Tüm REST API & TV Player Entegrasyon Testleri Başarılı ');
     console.log('====================================================');
 
   } finally {
+    try {
+      await prisma.screen.deleteMany({
+        where: { name: 'Giriş Danışma TV' }
+      });
+    } catch {}
     server.close();
   }
 }

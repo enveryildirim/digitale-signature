@@ -26,6 +26,7 @@
       </div>
       <h1 class="idle-title">Kurum İçi Bilgi Ekranı</h1>
       <p id="idle-clock" class="idle-clock">--:--</p>
+      <p id="idle-date" class="idle-date"></p>
       <div class="idle-badge">Yayın Bekleniyor</div>
       <p id="idle-screen-info" class="screen-info"></p>
     </div>
@@ -56,9 +57,25 @@
           <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
         </svg>
       </div>
-      <h2>Ekran Eşleştirme Kodu</h2>
-      <p class="pairing-desc">Bu ekranı panele eklemek için aşağıdaki 6 haneli kodu Admin Paneline giriniz:</p>
+      <h2>TV Ekranı Eşleştirme Kodu</h2>
+      <p class="pairing-desc">Bu ekranı kurum ağına bağlamak için aşağıdaki 6 haneli kodu Yönetici Paneline giriniz:</p>
       <div id="pairing-code-display" class="code-box">------</div>
+
+      <div class="pairing-steps">
+        <div class="step-card">
+          <div class="step-num">1</div>
+          <div class="step-text">Yönetici Paneline bilgisayarınızdan giriş yapın</div>
+        </div>
+        <div class="step-card">
+          <div class="step-num">2</div>
+          <div class="step-text"><strong>TV Ekranları</strong> sayfasında <strong>"Yeni TV Eşleştir"</strong>e tıklayın</div>
+        </div>
+        <div class="step-card">
+          <div class="step-num">3</div>
+          <div class="step-text">Yukarıdaki 6 haneli kodu yazıp TV'yi adlandırın</div>
+        </div>
+      </div>
+
       <div class="pairing-status">
         <span class="status-dot pulsing"></span>
         <span id="pairing-status-text">Sunucuya bağlanıyor...</span>

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { X, Tv, Radio } from 'lucide-react';
 import { Screen } from '../types';
 
@@ -13,10 +13,26 @@ export const ScreenPreviewModal: React.FC<ScreenPreviewModalProps> = ({
   onClose,
   screen
 }) => {
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    if (isOpen) {
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [isOpen, onClose]);
+
   if (!isOpen || !screen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in">
+    <div
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in"
+    >
       <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-4xl overflow-hidden shadow-2xl flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-slate-800">
@@ -35,12 +51,16 @@ export const ScreenPreviewModal: React.FC<ScreenPreviewModalProps> = ({
                 </span>
               </div>
               <p className="text-[11px] text-slate-400 mt-0.5">
-                {screen.group?.name || 'Bağımsız TV'} • Durum: {screen.status}
+                {screen.group?.name || 'Bağımsız TV'} • Durum: {screen.status === 'ONLINE' ? 'Çevrimiçi' : 'Çevrimdışı'}
                 {screen.currentMedia && ` • Oynatılan: ${screen.currentMedia}`}
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800">
+          <button
+            onClick={onClose}
+            aria-label="Önizlemeyi Kapat"
+            className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
+          >
             <X className="w-5 h-5" />
           </button>
         </div>

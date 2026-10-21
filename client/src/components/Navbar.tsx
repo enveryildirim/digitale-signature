@@ -116,9 +116,10 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 key={item.id}
                 onClick={() => setCurrentTab(item.id)}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
+                aria-current={isActive ? 'page' : undefined}
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all active:scale-95 ${
                   isActive
-                    ? 'bg-sky-600 text-white shadow-sm shadow-sky-600/30'
+                    ? 'bg-sky-600 text-white shadow-md shadow-sky-600/30'
                     : 'text-slate-300 hover:text-white hover:bg-slate-800/80'
                 }`}
               >

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../db.js';
 import { authMiddleware } from '../middleware/auth.js';
+import { WsServer } from '../ws/wsServer.js';
 
 const router = Router();
 router.use(authMiddleware);
@@ -92,6 +93,59 @@ router.delete('/:id', async (req, res) => {
     });
 
     res.json({ message: 'Grup silindi.' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/groups/:id/quick-assign - Instantly assign default playlist to an entire floor/group
+router.post('/:id/quick-assign', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { playlistId } = req.body;
+
+    const group = await prisma.screenGroup.findUnique({ where: { id } });
+    if (!group) {
+      return res.status(404).json({ error: 'Grup bulunamadı.' });
+    }
+
+    if (playlistId) {
+      const playlist = await prisma.playlist.findUnique({ where: { id: playlistId } });
+      if (!playlist) {
+        return res.status(404).json({ error: 'Playlist bulunamadı.' });
+      }
+
+      const existing = await prisma.assignment.findFirst({
+        where: { groupId: id, isDefault: true }
+      });
+
+      let assignment;
+      if (existing) {
+        assignment = await prisma.assignment.update({
+          where: { id: existing.id },
+          data: { playlistId }
+        });
+      } else {
+        assignment = await prisma.assignment.create({
+          data: {
+            groupId: id,
+            playlistId,
+            isDefault: true,
+            priority: 1
+          }
+        });
+      }
+
+      WsServer.notifyGroupSync(id);
+      res.json({ message: `${group.name} katı yayını '${playlist.name}' olarak güncellendi.`, assignment });
+    } else {
+      await prisma.assignment.deleteMany({
+        where: { groupId: id, isDefault: true }
+      });
+
+      WsServer.notifyGroupSync(id);
+      res.json({ message: `${group.name} katı varsayılan yayını kaldırıldı.` });
+    }
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

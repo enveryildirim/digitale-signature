@@ -25,6 +25,7 @@
   const slotB = document.getElementById('slot-b');
   const idleScreen = document.getElementById('idle-screen');
   const idleClock = document.getElementById('idle-clock');
+  const idleDate = document.getElementById('idle-date');
   const idleInfo = document.getElementById('idle-screen-info');
   const pairingScreen = document.getElementById('pairing-screen');
   const pairingCodeDisplay = document.getElementById('pairing-code-display');
@@ -47,6 +48,15 @@
     const hours = String(now.getHours()).padStart(2, '0');
     const minutes = String(now.getMinutes()).padStart(2, '0');
     idleClock.textContent = `${hours}:${minutes}`;
+
+    if (idleDate) {
+      idleDate.textContent = now.toLocaleDateString('tr-TR', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+    }
   }
 
   // Wake Lock API: Prevent TV display from sleeping (only for physical TV)

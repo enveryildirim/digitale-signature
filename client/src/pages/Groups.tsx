@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FolderTree, Plus, Trash2, Edit2, X, Check } from 'lucide-react';
+import { FolderTree, Plus, Trash2, Edit2, X, Check, AlertCircle } from 'lucide-react';
 import { ScreenGroup } from '../types';
 
 interface GroupsProps {
@@ -22,16 +22,23 @@ export const Groups: React.FC<GroupsProps> = ({
   const [editName, setEditName] = useState('');
   const [editDesc, setEditDesc] = useState('');
   const [loading, setLoading] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (!name.trim()) {
+      setCreateError('Lütfen kat veya grup için bir isim giriniz.');
+      return;
+    }
     try {
       setLoading(true);
+      setCreateError(null);
       await onCreateGroup({ name: name.trim(), description: description.trim() || undefined });
       setName('');
       setDescription('');
       setIsCreating(false);
+    } catch (err: any) {
+      setCreateError(err.message || 'Grup oluşturulamadı.');
     } finally {
       setLoading(false);
     }
@@ -49,7 +56,8 @@ export const Groups: React.FC<GroupsProps> = ({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold text-white tracking-wide">Katlar ve Ekran Grupları</h2>
           <p className="text-xs text-slate-400 mt-1">
@@ -57,11 +65,14 @@ export const Groups: React.FC<GroupsProps> = ({
           </p>
         </div>
         <button
-          onClick={() => setIsCreating(true)}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-sky-600 hover:bg-sky-500 text-white transition shadow-md shadow-sky-600/30"
+          onClick={() => {
+            setIsCreating(true);
+            setCreateError(null);
+          }}
+          className="btn-primary"
         >
           <Plus className="w-4 h-4" />
-          Yeni Kat / Grup Ekle
+          Yeni Kat / Grup Tanımla
         </button>
       </div>
 
@@ -69,145 +80,186 @@ export const Groups: React.FC<GroupsProps> = ({
       {isCreating && (
         <form
           onSubmit={handleCreate}
-          className="bg-slate-900 border border-sky-500/40 rounded-2xl p-5 space-y-4 animate-in fade-in"
+          className="bg-slate-900 border border-sky-500/40 rounded-2xl p-5 space-y-4 shadow-xl animate-in fade-in"
         >
           <div className="flex items-center justify-between">
             <h4 className="text-sm font-semibold text-white">Yeni Kat / Grup Tanımla</h4>
             <button
               type="button"
               onClick={() => setIsCreating(false)}
-              className="text-slate-400 hover:text-white"
+              aria-label="Kapat"
+              className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
+
+          {createError && (
+            <div className="flex items-center gap-2 p-3 text-xs text-rose-400 bg-rose-950/50 border border-rose-800/60 rounded-xl">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{createError}</span>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">
-                Grup Adı <span className="text-red-400">*</span>
+              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                Kat / Grup Adı <span className="text-rose-400">*</span>
               </label>
               <input
                 type="text"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  if (createError) setCreateError(null);
+                }}
                 placeholder="Ör: 4. Kat - Ar-Ge Laboratuvarı"
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:border-sky-500"
+                className="input-standard"
                 autoFocus
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">Açıklama</label>
+              <label className="block text-xs font-medium text-slate-300 mb-1.5">Açıklama (İsteğe bağlı)</label>
               <input
                 type="text"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Ör: Ar-Ge katındaki ekranlar için yayın grubu"
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:border-sky-500"
+                className="input-standard"
               />
             </div>
           </div>
-          <div className="flex justify-end gap-2">
+          <div className="flex justify-end gap-2.5 pt-2">
             <button
               type="button"
               onClick={() => setIsCreating(false)}
-              className="px-3 py-1.5 text-xs text-slate-400 hover:text-white"
+              className="btn-secondary"
             >
-              İptal
+              Vazgeç
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="px-4 py-1.5 text-xs font-semibold rounded-lg bg-sky-600 hover:bg-sky-500 text-white disabled:opacity-50"
+              className="btn-primary"
             >
-              Kaydet
+              {loading ? 'Kaydediliyor...' : 'Kat Grubunu Kaydet'}
             </button>
           </div>
         </form>
       )}
 
       {/* Groups List */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {groups.map((group) => {
-          const isEditing = editingId === group.id;
+      {groups.length === 0 ? (
+        <div className="border border-dashed border-slate-800 rounded-2xl p-12 text-center bg-slate-900/40">
+          <FolderTree className="w-12 h-12 text-slate-600 mx-auto mb-3" />
+          <h4 className="text-sm font-semibold text-slate-200">Tanımlı Kat Grubu Bulunmuyor</h4>
+          <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+            TV'lerinizi katlara göre yönetebilmek için (Örn: Zemin Kat, Yemekhane, 1. Kat) grup oluşturun.
+          </p>
+          <button
+            onClick={() => setIsCreating(true)}
+            className="mt-5 btn-primary"
+          >
+            <Plus className="w-4 h-4" />
+            İlk Kat Grubunu Oluştur
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {groups.map((group) => {
+            const isEditing = editingId === group.id;
 
-          return (
-            <div
-              key={group.id}
-              className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between hover:border-slate-700 transition shadow-lg"
-            >
-              {isEditing ? (
-                <div className="space-y-3">
-                  <input
-                    type="text"
-                    value={editName}
-                    onChange={(e) => setEditName(e.target.value)}
-                    className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-xs text-white"
-                  />
-                  <input
-                    type="text"
-                    value={editDesc}
-                    onChange={(e) => setEditDesc(e.target.value)}
-                    placeholder="Açıklama"
-                    className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-xs text-white"
-                  />
-                  <div className="flex justify-end gap-1.5">
-                    <button
-                      onClick={() => setEditingId(null)}
-                      className="p-1 text-slate-400 hover:text-white"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => handleSaveEdit(group.id)}
-                      className="p-1 text-emerald-400 hover:text-emerald-300"
-                    >
-                      <Check className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div>
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <div className="p-2 bg-sky-500/10 text-sky-400 rounded-xl border border-sky-500/20">
-                        <FolderTree className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <h4 className="font-semibold text-white text-sm">{group.name}</h4>
-                        <span className="text-[10px] text-slate-400">
-                          {group.screens?.length || 0} TV Ekranı Bağlı
-                        </span>
-                      </div>
+            return (
+              <div
+                key={group.id}
+                className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between hover:border-slate-700 transition shadow-lg space-y-4"
+              >
+                {isEditing ? (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-400 mb-1">Grup Adı</label>
+                      <input
+                        type="text"
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        className="input-standard text-xs py-2"
+                        autoFocus
+                      />
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-400 mb-1">Açıklama</label>
+                      <input
+                        type="text"
+                        value={editDesc}
+                        onChange={(e) => setEditDesc(e.target.value)}
+                        placeholder="Açıklama"
+                        className="input-standard text-xs py-2"
+                      />
+                    </div>
+                    <div className="flex justify-end gap-2 pt-1">
                       <button
-                        onClick={() => {
-                          setEditingId(group.id);
-                          setEditName(group.name);
-                          setEditDesc(group.description || '');
-                        }}
-                        className="p-1 text-slate-400 hover:text-white"
+                        onClick={() => setEditingId(null)}
+                        className="btn-secondary text-xs px-3 py-1.5 min-h-[32px]"
                       >
-                        <Edit2 className="w-3.5 h-3.5" />
+                        İptal
                       </button>
                       <button
-                        onClick={() => onDeleteGroup(group.id)}
-                        className="p-1 text-slate-400 hover:text-red-400"
+                        onClick={() => handleSaveEdit(group.id)}
+                        className="btn-primary text-xs px-3 py-1.5 min-h-[32px]"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Check className="w-3.5 h-3.5" />
+                        Kaydet
                       </button>
                     </div>
                   </div>
+                ) : (
+                  <div>
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2.5 bg-sky-500/10 text-sky-400 rounded-xl border border-sky-500/20">
+                          <FolderTree className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <h4 className="font-semibold text-white text-sm tracking-wide">{group.name}</h4>
+                          <span className="text-[11px] text-slate-400 font-mono">
+                            {group.screens?.length || 0} TV Ekranı Bağlı
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => {
+                            setEditingId(group.id);
+                            setEditName(group.name);
+                            setEditDesc(group.description || '');
+                          }}
+                          title="Kat Grubunu Düzenle"
+                          aria-label={`${group.name} grubunu düzenle`}
+                          className="btn-ghost"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => onDeleteGroup(group.id)}
+                          title="Kat Grubunu Sil"
+                          aria-label={`${group.name} grubunu sil`}
+                          className="btn-ghost text-slate-400 hover:text-rose-400"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
 
-                  <p className="text-xs text-slate-400 mt-3 line-clamp-2">
-                    {group.description || 'Açıklama girilmedi.'}
-                  </p>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+                    <p className="text-xs text-slate-400 mt-3 line-clamp-2 leading-relaxed">
+                      {group.description || 'Açıklama girilmedi.'}
+                    </p>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 };

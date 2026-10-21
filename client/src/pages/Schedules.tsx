@@ -24,7 +24,7 @@ export const Schedules: React.FC<SchedulesProps> = ({
   };
 
   const formatDays = (daysStr?: string | null) => {
-    if (!daysStr) return 'Tüm Günler';
+    if (!daysStr) return 'Tüm Günler (Haftanın 7 Günü)';
     return daysStr
       .split(',')
       .map((d) => dayLabels[d.trim()] || d)
@@ -33,39 +33,40 @@ export const Schedules: React.FC<SchedulesProps> = ({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold text-white tracking-wide">Yayın Zamanlama ve Atamalar</h2>
+          <h2 className="text-xl font-bold text-white tracking-wide">Yayın Planlama ve Zamanlama</h2>
           <p className="text-xs text-slate-400 mt-1">
-            Hangi ekranda veya katta ne zaman hangi playlist'in oynatılacağını belirleyin
+            Hangi ekranda veya katta ne zaman hangi oynatma listesinin yayınlanacağını belirleyin
           </p>
         </div>
         <button
           onClick={onOpenScheduleModal}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-sky-600 hover:bg-sky-500 text-white transition shadow-md shadow-sky-600/30"
+          className="btn-primary"
         >
           <Plus className="w-4 h-4" />
-          Yeni Yayın Planı Ekle
+          Yeni Yayın Planı Oluştur
         </button>
       </div>
 
       {assignments.length === 0 ? (
         <div className="border border-dashed border-slate-800 rounded-2xl p-12 text-center bg-slate-900/40">
           <CalendarClock className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-          <h4 className="text-sm font-semibold text-slate-300">Henüz Yayın Ataması Yok</h4>
-          <p className="text-xs text-slate-500 mt-1">
-            TV ekranlarına veya kat gruplarına oynatma listesi atayarak yayını başlatın.
+          <h4 className="text-sm font-semibold text-slate-200">Henüz Yayın Ataması Bulunmuyor</h4>
+          <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+            TV ekranlarına veya kat gruplarına oynatma listesi atayarak yayını hemen başlatabilirsiniz.
           </p>
           <button
             onClick={onOpenScheduleModal}
-            className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-sky-600 hover:bg-sky-500 text-white transition"
+            className="mt-5 btn-primary"
           >
             <Plus className="w-4 h-4" />
-            İlk Yayını Planla
+            İlk Yayın Planını Oluştur
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {assignments.map((assignment) => {
             const targetName = assignment.screen
               ? `📺 ${assignment.screen.name}`
@@ -76,7 +77,7 @@ export const Schedules: React.FC<SchedulesProps> = ({
             return (
               <div
                 key={assignment.id}
-                className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between hover:border-slate-700 transition shadow-lg"
+                className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between hover:border-slate-700 transition shadow-lg space-y-4"
               >
                 <div>
                   <div className="flex items-start justify-between">
@@ -84,29 +85,30 @@ export const Schedules: React.FC<SchedulesProps> = ({
                       <span className="text-[11px] font-semibold text-sky-400 block mb-1">
                         {targetName}
                       </span>
-                      <h4 className="font-semibold text-white text-base">
+                      <h4 className="font-semibold text-white text-base tracking-wide">
                         {assignment.playlist?.name || 'Playlist'}
                       </h4>
                     </div>
                     <button
                       onClick={() => onDeleteAssignment(assignment.id)}
-                      title="Atamayı Sil"
-                      className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition"
+                      title="Yayın Planını Kaldır"
+                      aria-label="Yayın planını kaldır"
+                      className="btn-ghost text-slate-400 hover:text-rose-400"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
 
-                  <div className="mt-4 pt-3 border-t border-slate-800/80 space-y-2 text-xs">
+                  <div className="mt-4 pt-3 border-t border-slate-800/80 space-y-2.5 text-xs">
                     <div className="flex items-center justify-between text-slate-400">
                       <span>Yayın Türü:</span>
                       {assignment.isDefault ? (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700 flex items-center gap-1">
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
                           <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                          Varsayılan (Arka Plan)
+                          7/24 Varsayılan Yayın
                         </span>
                       ) : (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-950/60 text-amber-400 border border-amber-800 flex items-center gap-1">
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center gap-1">
                           <Clock className="w-3 h-3" />
                           Zamanlanmış Yayın
                         </span>
@@ -116,9 +118,9 @@ export const Schedules: React.FC<SchedulesProps> = ({
                     {!assignment.isDefault && (
                       <>
                         <div className="flex items-center justify-between text-slate-400">
-                          <span className="flex items-center gap-1">
-                            <Calendar className="w-3.5 h-3.5 text-slate-500" />
-                            Günler:
+                          <span className="flex items-center gap-1.5">
+                            <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                            Aktif Günler:
                           </span>
                           <span className="font-medium text-slate-200">
                             {formatDays(assignment.daysOfWeek)}
@@ -126,8 +128,8 @@ export const Schedules: React.FC<SchedulesProps> = ({
                         </div>
 
                         <div className="flex items-center justify-between text-slate-400">
-                          <span className="flex items-center gap-1">
-                            <Clock className="w-3.5 h-3.5 text-slate-500" />
+                          <span className="flex items-center gap-1.5">
+                            <Clock className="w-3.5 h-3.5 text-slate-400" />
                             Saat Aralığı:
                           </span>
                           <span className="font-mono font-bold text-sky-400">

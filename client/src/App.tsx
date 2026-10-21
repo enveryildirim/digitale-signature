@@ -11,11 +11,15 @@ import { Playlists } from './pages/Playlists';
 import { Schedules } from './pages/Schedules';
 import { PairScreenModal } from './components/PairScreenModal';
 import { MediaUploadModal } from './components/MediaUploadModal';
+import { MediaEditModal } from './components/MediaEditModal';
 import { PlaylistModal } from './components/PlaylistModal';
 import { ScheduleModal } from './components/ScheduleModal';
 import { EmergencyModal } from './components/EmergencyModal';
 import { ScreenPreviewModal } from './components/ScreenPreviewModal';
-import { CheckCircle2, AlertCircle } from 'lucide-react';
+import { ConfirmModal, ConfirmModalState } from './components/ConfirmModal';
+import { Toast, ToastData, ToastType } from './components/Toast';
+import { Breadcrumbs } from './components/Breadcrumbs';
+import { PageSkeleton } from './components/skeletons/PageSkeleton';
 
 export const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(() => {
@@ -36,19 +40,35 @@ export const App: React.FC = () => {
 
   // Modals
   const [isPairModalOpen, setIsPairModalOpen] = useState(false);
+  const [pairModalInitialCode, setPairModalInitialCode] = useState<string>('');
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [editingMedia, setEditingMedia] = useState<MediaType | null>(null);
+  const [isEditMediaModalOpen, setIsEditMediaModalOpen] = useState(false);
   const [isPlaylistModalOpen, setIsPlaylistModalOpen] = useState(false);
   const [editingPlaylist, setEditingPlaylist] = useState<Playlist | null>(null);
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
   const [isEmergencyModalOpen, setIsEmergencyModalOpen] = useState(false);
   const [previewingScreen, setPreviewingScreen] = useState<Screen | null>(null);
 
-  // Toast
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  // Confirm Modal state
+  const [confirmModalState, setConfirmModalState] = useState<ConfirmModalState | null>(null);
+  const [confirmLoading, setConfirmLoading] = useState(false);
 
-  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 4000);
+  // Toast state
+  const [toast, setToast] = useState<ToastData | null>(null);
+
+  const showToast = (
+    message: string,
+    type: ToastType = 'success',
+    description?: string,
+    undoAction?: { label?: string; onClick: () => void }
+  ) => {
+    setToast({
+      message,
+      type,
+      description,
+      undoAction
+    });
   };
 
   const loadAllData = async () => {
@@ -70,6 +90,7 @@ export const App: React.FC = () => {
       setIsEmergencyActive(emergencyData.active);
     } catch (err: any) {
       console.error('Veri yükleme hatası:', err);
+      showToast('Sunucu bağlantı hatası oluştu.', 'error', 'Lütfen yerel ağ bağlantınızı kontrol edin.');
     } finally {
       setLoading(false);
     }
@@ -101,137 +122,255 @@ export const App: React.FC = () => {
   // Screen Actions
   const handlePairScreen = async (data: { pairingCode: string; name: string; groupId?: string }) => {
     await api.pairScreen(data);
-    showToast('TV ekranı başarıyla eşleştirildi!');
+    showToast('TV ekranı başarıyla sisteme bağlandı!', 'success', `${data.name} yayına hazır.`);
     loadAllData();
   };
 
   const handleSyncScreen = async (id: string) => {
     await api.syncScreen(id);
-    showToast('Ekran yenileme sinyali gönderildi.');
+    showToast('Ekran yenileme sinyali iletildi.', 'info', 'TV yeni manifestoyu çekiyor.');
   };
 
   const handleSyncAll = async () => {
     await api.syncAllScreens();
-    showToast('Tüm TV ekranlarına anlık yayın yenileme sinyali iletildi!');
+    showToast('Tüm TV ekranlarına anlık yayın yenileme sinyali iletildi!', 'success');
   };
 
-  const handleUnpairScreen = async (id: string) => {
-    if (confirm('Bu ekranın eşleştirmesini sıfırlamak istediğinize emin misiniz?')) {
-      await api.unpairScreen(id);
-      showToast('Ekran eşleştirmesi kaldırıldı.');
+  const handleUnpairScreen = (id: string) => {
+    const target = screens.find((s) => s.id === id);
+    setConfirmModalState({
+      isOpen: true,
+      title: 'TV Eşleştirmesini Sıfırla',
+      message: `"${target?.name || 'Bu TV'}" ekranının sunucu bağlantısı kesilecektir. TV ekranı bekleme moduna geçecek ve yeni bir 6 haneli eşleştirme kodu üretecektir.`,
+      confirmLabel: 'Eşleştirmeyi Sıfırla',
+      cancelLabel: 'Vazgeç',
+      isDestructive: true,
+      onConfirm: async () => {
+        try {
+          setConfirmLoading(true);
+          await api.unpairScreen(id);
+          showToast('Ekran eşleştirmesi kaldırıldı.', 'info', 'TV ekranında yeni eşleştirme kodu görüntülenecektir.');
+          loadAllData();
+        } finally {
+          setConfirmLoading(false);
+        }
+      }
+    });
+  };
+
+  const handleDeleteScreen = (id: string) => {
+    const target = screens.find((s) => s.id === id);
+    setConfirmModalState({
+      isOpen: true,
+      title: 'TV Ekranını Sistemden Kaldır',
+      message: `"${target?.name || 'Bu TV'}" ekranı ve tüm yayın ayarları veritabanından kalıcı olarak silinecektir.`,
+      confirmLabel: 'Evet, TV Ekranını Sil',
+      cancelLabel: 'Vazgeç',
+      isDestructive: true,
+      onConfirm: async () => {
+        try {
+          setConfirmLoading(true);
+          await api.deleteScreen(id);
+          showToast('TV ekranı sistemden tamamen kaldırıldı.', 'success');
+          loadAllData();
+        } finally {
+          setConfirmLoading(false);
+        }
+      }
+    });
+  };
+
+  const handleUpdateScreen = async (id: string, data: { name?: string; groupId?: string | null }) => {
+    try {
+      await api.updateScreen(id, data);
+      showToast('TV ekranı bilgileri başarıyla güncellendi.', 'success');
       loadAllData();
+    } catch (err: any) {
+      showToast(err.message || 'Güncelleme yapılamadı.', 'error');
     }
   };
 
-  const handleDeleteScreen = async (id: string) => {
-    if (confirm('Bu TV ekranını sistemden tamamen silmek istediğinize emin misiniz?')) {
-      await api.deleteScreen(id);
-      showToast('Ekran silindi.');
+  const handleQuickAssignScreen = async (screenId: string, playlistId: string | null) => {
+    try {
+      const res = await api.quickAssignScreen(screenId, playlistId);
+      showToast(res.message, 'success', 'TV ekranına anlık yayın sinyali iletildi.');
       loadAllData();
+    } catch (err: any) {
+      showToast(err.message || 'Yayın atanamadı.', 'error');
     }
   };
 
-  const handleUpdateScreenGroup = async (id: string, groupId: string | null) => {
-    await api.updateScreen(id, { groupId });
-    showToast('Ekranın kat grubu güncellendi.');
-    loadAllData();
+  const handleQuickAssignGroup = async (groupId: string, playlistId: string | null) => {
+    try {
+      const res = await api.quickAssignGroup(groupId, playlistId);
+      showToast(res.message, 'success', 'Bu kattaki tüm TV ekranlarına anlık yayın iletildi.');
+      loadAllData();
+    } catch (err: any) {
+      showToast(err.message || 'Kat yayını atanamadı.', 'error');
+    }
   };
 
   // Group Actions
   const handleCreateGroup = async (data: { name: string; description?: string }) => {
     await api.createGroup(data);
-    showToast('Yeni kat grubu oluşturuldu.');
+    showToast(`"${data.name}" kat grubu oluşturuldu.`, 'success');
     loadAllData();
   };
 
   const handleUpdateGroup = async (id: string, data: { name?: string; description?: string }) => {
     await api.updateGroup(id, data);
-    showToast('Grup güncellendi.');
+    showToast('Kat grubu başarıyla güncellendi.', 'success');
     loadAllData();
   };
 
   const handleDeleteGroup = async (id: string) => {
-    if (confirm('Bu grubu silmek istediğinize emin misiniz?')) {
-      await api.deleteGroup(id);
-      showToast('Grup silindi.');
-      loadAllData();
-    }
+    const target = groups.find((g) => g.id === id);
+    setConfirmModalState({
+      isOpen: true,
+      title: 'Kat Grubunu Sil',
+      message: `"${target?.name || 'Bu kat grubu'}" silindiğinde, bu gruptaki TV'lerin grup bağı kaldırılacak ve gruba atanmış varsayılan yayınlar sonlanacaktır.`,
+      confirmLabel: 'Grubu Sil',
+      cancelLabel: 'Vazgeç',
+      isDestructive: true,
+      onConfirm: async () => {
+        try {
+          setConfirmLoading(true);
+          await api.deleteGroup(id);
+          showToast('Kat grubu silindi.', 'success');
+          loadAllData();
+        } finally {
+          setConfirmLoading(false);
+        }
+      }
+    });
   };
 
   // Media Actions
   const handleUploadFile = async (formData: FormData) => {
     await api.uploadMedia(formData);
-    showToast('Medya dosyası yüklendi.');
+    showToast('Medya dosyası kütüphaneye başarıyla yüklendi.', 'success');
     loadAllData();
   };
 
   const handleAddUrl = async (data: { title: string; url: string; duration?: number }) => {
     await api.addUrlMedia(data);
-    showToast('Web sayfası medyası eklendi.');
+    showToast('Web sayfası medyası başarıyla eklendi.', 'success');
     loadAllData();
   };
 
   const handleAddTextAnnouncement = async (data: { title: string; message: string; bgColor?: string; textColor?: string; duration?: number }) => {
     await api.createTextAnnouncement(data);
-    showToast('Metin duyurusu başarıyla oluşturuldu.');
+    showToast('Metin duyurusu başarıyla oluşturuldu ve kütüphaneye eklendi.', 'success');
     loadAllData();
+  };
+
+  const handleUpdateMedia = async (id: string, data: { title?: string; duration?: number; url?: string } | FormData) => {
+    try {
+      await api.updateMedia(id, data);
+      showToast('Medya bilgileri başarıyla güncellendi.', 'success');
+      loadAllData();
+    } catch (err: any) {
+      showToast(err.message || 'Medya güncellenemedi.', 'error');
+      throw err;
+    }
   };
 
   const handleActivateEmergency = async (title: string, message: string) => {
     await api.activateEmergency({ title, message });
     setIsEmergencyActive(true);
-    showToast('🚨 ACİL DURUM YAYINI TÜM TVLERE İLETİLDİ!', 'error');
+    showToast('🚨 ACİL DURUM YAYINI TÜM EKRANLARA BASILDI!', 'error', 'Tüm normal yayınlar durduruldu.');
     loadAllData();
   };
 
   const handleDeactivateEmergency = async () => {
     await api.deactivateEmergency();
     setIsEmergencyActive(false);
-    showToast('Acil durum yayını kaldırıldı, olağan yayına dönüldü.', 'success');
+    showToast('Acil durum yayını kaldırıldı.', 'success', 'TV ekranları olağan yayın akışına geri döndü.');
     loadAllData();
   };
 
   const handleDeleteMedia = async (id: string) => {
-    if (confirm('Bu medyayı silmek istediğinize emin misiniz?')) {
-      await api.deleteMedia(id);
-      showToast('Medya silindi.');
-      loadAllData();
-    }
+    const target = media.find((m) => m.id === id);
+    setConfirmModalState({
+      isOpen: true,
+      title: 'Medyayı Kütüphaneden Sil',
+      message: `"${target?.title || 'Bu medya'}" dosyası sunucudan kalıcı olarak silinecektir. Bu medyayı içeren oynatma listeleri güncellenecektir.`,
+      confirmLabel: 'Evet, Kalıcı Olarak Sil',
+      cancelLabel: 'Vazgeç',
+      isDestructive: true,
+      onConfirm: async () => {
+        try {
+          setConfirmLoading(true);
+          await api.deleteMedia(id);
+          showToast('Medya kütüphaneden silindi.', 'success');
+          loadAllData();
+        } finally {
+          setConfirmLoading(false);
+        }
+      }
+    });
   };
 
   // Playlist Actions
   const handleSavePlaylist = async (data: { name: string; description?: string; items: Array<{ mediaId: string; duration: number }> }) => {
     if (editingPlaylist) {
       await api.updatePlaylist(editingPlaylist.id, data);
-      showToast('Playlist başarıyla güncellendi.');
+      showToast('Oynatma listesi başarıyla güncellendi.', 'success');
     } else {
       await api.createPlaylist(data);
-      showToast('Yeni playlist oluşturuldu.');
+      showToast('Yeni oynatma listesi oluşturuldu.', 'success');
     }
     loadAllData();
   };
 
   const handleDeletePlaylist = async (id: string) => {
-    if (confirm('Bu playlisti silmek istediğinize emin misiniz?')) {
-      await api.deletePlaylist(id);
-      showToast('Playlist silindi.');
-      loadAllData();
-    }
+    const target = playlists.find((p) => p.id === id);
+    setConfirmModalState({
+      isOpen: true,
+      title: 'Oynatma Listesini Sil',
+      message: `"${target?.name || 'Bu oynatma listesi'}" silindiğinde, bu listeye bağlı TV ekranları varsayılan yayına veya bekleme ekranına dönecektir.`,
+      confirmLabel: 'Evet, Listeyi Sil',
+      cancelLabel: 'Vazgeç',
+      isDestructive: true,
+      onConfirm: async () => {
+        try {
+          setConfirmLoading(true);
+          await api.deletePlaylist(id);
+          showToast('Oynatma listesi silindi.', 'success');
+          loadAllData();
+        } finally {
+          setConfirmLoading(false);
+        }
+      }
+    });
   };
 
   // Schedule Actions
   const handleSaveSchedule = async (data: any) => {
     await api.createAssignment(data);
-    showToast('Yayın planı kaydedildi ve TV ekranlarına iletildi!');
+    showToast('Yayın planı kaydedildi ve TV ekranlarına iletildi!', 'success');
     loadAllData();
   };
 
   const handleDeleteSchedule = async (id: string) => {
-    if (confirm('Bu yayın atamasını kaldırmak istediğinize emin misiniz?')) {
-      await api.deleteAssignment(id);
-      showToast('Yayın ataması kaldırıldı.');
-      loadAllData();
-    }
+    setConfirmModalState({
+      isOpen: true,
+      title: 'Yayın Planını Kaldır',
+      message: 'Bu zamanlanmış yayın kuralı kaldırılacak ve hedef ekranlar varsayılan akışa dönecektir.',
+      confirmLabel: 'Yayın Planını Kaldır',
+      cancelLabel: 'Vazgeç',
+      isDestructive: true,
+      onConfirm: async () => {
+        try {
+          setConfirmLoading(true);
+          await api.deleteAssignment(id);
+          showToast('Yayın ataması kaldırıldı.', 'success');
+          loadAllData();
+        } finally {
+          setConfirmLoading(false);
+        }
+      }
+    });
   };
 
   if (!token) {
@@ -255,11 +394,16 @@ export const App: React.FC = () => {
         onOpenEmergencyModal={() => setIsEmergencyModalOpen(true)}
       />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {/* Breadcrumb Navigation (UX-2.2) */}
+        <Breadcrumbs
+          currentTab={currentTab}
+          onSelectTab={setCurrentTab}
+          subtitle={currentTab === 'screens' ? `${onlineScreensCount}/${totalPairedScreens} TV Aktif` : undefined}
+        />
+
         {loading ? (
-          <div className="flex items-center justify-center py-24">
-            <div className="w-8 h-8 border-4 border-sky-500 border-t-transparent rounded-full animate-spin"></div>
-          </div>
+          <PageSkeleton tab={currentTab} />
         ) : (
           <>
             {currentTab === 'dashboard' && (
@@ -280,13 +424,23 @@ export const App: React.FC = () => {
               <Screens
                 screens={screens}
                 groups={groups}
-                onOpenPairModal={() => setIsPairModalOpen(true)}
+                playlists={playlists}
+                onOpenPairModal={(code) => {
+                  setPairModalInitialCode(code || '');
+                  setIsPairModalOpen(true);
+                }}
                 onSyncScreen={handleSyncScreen}
                 onSyncAll={handleSyncAll}
                 onUnpairScreen={handleUnpairScreen}
                 onDeleteScreen={handleDeleteScreen}
-                onUpdateScreenGroup={handleUpdateScreenGroup}
+                onUpdateScreen={handleUpdateScreen}
+                onQuickAssignScreen={handleQuickAssignScreen}
+                onQuickAssignGroup={handleQuickAssignGroup}
                 onPreviewScreen={(s) => setPreviewingScreen(s)}
+                onOpenPlaylistModal={() => {
+                  setEditingPlaylist(null);
+                  setIsPlaylistModalOpen(true);
+                }}
               />
             )}
 
@@ -303,6 +457,10 @@ export const App: React.FC = () => {
               <Media
                 mediaList={media}
                 onOpenUploadModal={() => setIsUploadModalOpen(true)}
+                onEditMedia={(m) => {
+                  setEditingMedia(m);
+                  setIsEditMediaModalOpen(true);
+                }}
                 onDeleteMedia={handleDeleteMedia}
               />
             )}
@@ -327,29 +485,25 @@ export const App: React.FC = () => {
         )}
       </main>
 
-      {/* Toast Notification */}
-      {toast && (
-        <div
-          className={`fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-2xl border text-xs font-semibold animate-in slide-in-from-bottom-5 ${
-            toast.type === 'success'
-              ? 'bg-slate-900 border-emerald-500/50 text-emerald-400'
-              : 'bg-slate-900 border-red-500/50 text-red-400'
-          }`}
-        >
-          {toast.type === 'success' ? (
-            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
-          ) : (
-            <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
-          )}
-          <span>{toast.message}</span>
-        </div>
-      )}
+      {/* Toast Notification (UX-1.2) */}
+      <Toast toast={toast} onClose={() => setToast(null)} />
+
+      {/* Custom Accessible Confirm Modal (UX-1.1) */}
+      <ConfirmModal
+        state={confirmModalState}
+        onClose={() => setConfirmModalState(null)}
+        loading={confirmLoading}
+      />
 
       {/* Modals */}
       <PairScreenModal
         isOpen={isPairModalOpen}
-        onClose={() => setIsPairModalOpen(false)}
+        onClose={() => {
+          setIsPairModalOpen(false);
+          setPairModalInitialCode('');
+        }}
         groups={groups}
+        initialPairingCode={pairModalInitialCode}
         onPair={handlePairScreen}
       />
 
@@ -359,6 +513,16 @@ export const App: React.FC = () => {
         onUploadFile={handleUploadFile}
         onAddUrl={handleAddUrl}
         onAddTextAnnouncement={handleAddTextAnnouncement}
+      />
+
+      <MediaEditModal
+        isOpen={isEditMediaModalOpen}
+        onClose={() => {
+          setIsEditMediaModalOpen(false);
+          setEditingMedia(null);
+        }}
+        media={editingMedia}
+        onUpdate={handleUpdateMedia}
       />
 
       <PlaylistModal
@@ -394,4 +558,5 @@ export const App: React.FC = () => {
     </div>
   );
 };
+
 export default App;

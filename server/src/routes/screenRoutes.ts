@@ -34,7 +34,18 @@ router.get('/', async (_req, res) => {
   try {
     const screens = await prisma.screen.findMany({
       include: {
-        group: { select: { id: true, name: true } },
+        group: {
+          select: {
+            id: true,
+            name: true,
+            assignments: {
+              where: { isDefault: true },
+              include: {
+                playlist: { select: { id: true, name: true } }
+              }
+            }
+          }
+        },
         assignments: {
           include: {
             playlist: { select: { id: true, name: true } }
@@ -150,6 +161,64 @@ router.delete('/:id', async (req, res) => {
     WsServer.notifyUnpair(id);
     await prisma.screen.delete({ where: { id } });
     res.json({ message: 'Ekran silindi.' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/screens/:id/quick-assign - Instantly assign or remove a default playlist for a screen
+router.post('/:id/quick-assign', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { playlistId } = req.body;
+
+    const screen = await prisma.screen.findUnique({ where: { id } });
+    if (!screen) {
+      return res.status(404).json({ error: 'Ekran bulunamadı.' });
+    }
+
+    if (playlistId) {
+      // Check if playlist exists
+      const playlist = await prisma.playlist.findUnique({ where: { id: playlistId } });
+      if (!playlist) {
+        return res.status(404).json({ error: 'Playlist bulunamadı.' });
+      }
+
+      // Upsert default assignment for this screen
+      const existing = await prisma.assignment.findFirst({
+        where: { screenId: id, isDefault: true }
+      });
+
+      let assignment;
+      if (existing) {
+        assignment = await prisma.assignment.update({
+          where: { id: existing.id },
+          data: { playlistId }
+        });
+      } else {
+        assignment = await prisma.assignment.create({
+          data: {
+            screenId: id,
+            playlistId,
+            isDefault: true,
+            priority: 1
+          }
+        });
+      }
+
+      // Notify screen via WebSocket
+      WsServer.notifyScreenSync(id);
+      res.json({ message: `Yayın '${playlist.name}' olarak ayarlandı.`, assignment });
+    } else {
+      // Remove screen-level default assignment so it falls back to floor/group
+      await prisma.assignment.deleteMany({
+        where: { screenId: id, isDefault: true }
+      });
+
+      // Notify screen via WebSocket
+      WsServer.notifyScreenSync(id);
+      res.json({ message: 'Ekrana özel yayın kaldırıldı, kat yayınına dönüldü.' });
+    }
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

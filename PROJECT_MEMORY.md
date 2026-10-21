@@ -66,6 +66,7 @@ tv-brodcast/
 ├── package.json              # Kök scripts (build, dev, test)
 ├── digital-signage-prd.md    # Kurumsal PRD v1.0
 ├── todo.md                   # Görev ve faz takip listesi
+├── todo_ux.md                # UX yasaları, erişilebilirlik ve mikro-kopya kontrol listesi & yol haritası
 ├── PROJECT_MEMORY.md         # Kalıcı proje hafızası (bu dosya)
 ├── AGENTS.md                 # Yapay zeka ajanları çalışma yönergesi
 ├── Dockerfile                # Üretim konteyner tanımı
@@ -109,6 +110,8 @@ tv-brodcast/
 │   │   │   ├── Navbar.tsx           # Üst menü, canlı TV sayaçları, hızlı yenile
 │   │   │   ├── PairScreenModal.tsx  # 6 haneli kod ile TV eşleştirme modalı
 │   │   │   ├── MediaUploadModal.tsx # Dosya yükleme & Web URL ekleme modalı
+│   │   │   ├── MediaEditModal.tsx   # Medya başlık, süre, URL ve dosya güncelleme modalı
+│   │   │   ├── MediaThumbnail.tsx   # Görsel, video (ilk kare) ve web sayfası thumbnail bileşeni
 │   │   │   ├── PlaylistModal.tsx    # Sürükle-bırak/sıralı playlist modalı
 │   │   │   └── ScheduleModal.tsx    # Kat/ekran zamanlama ve gün/saat kural modalı
 │   │   └── pages/
@@ -184,6 +187,102 @@ Sistem üzerinde 3 katmanlı otomatik doğrulama testi koşturulmuştur:
 ---
 
 ## 6. Geliştirici & Ajan Notları (Changelog)
+
+- **[2026-10-21] - [Antigravity Agent]:**
+  - **Yapılan İş:** `todo_ux.md` içerisindeki tüm UX iyileştirmeleri başarıyla hayata geçirildi:
+    1. **Sistem Geri Bildirimi & Güvenlik:** Native `window.confirm()` kaldırıldı; Tailwind tabanlı, odak korumalı ve tehlike uyarılı `ConfirmModal` entegre edildi. 4 seviyeli (`success`, `error`, `warning`, `info`) zaman sayaçlı ve "Geri Al" (Undo) aksiyonlu zengin `Toast` sistemi geliştirildi.
+    2. **Algılanan Hız & İskelet Ekranlar:** Sayfa yüklemelerindeki tekli çark (spinner) kaldırılarak yerine sayfa bazlı (Dashboard, Screens, Media, Playlists, Schedules) `PageSkeleton` bileşeni eklendi.
+    3. **Navigasyon & Arama:** Sayfa başlıklarına dinamik `Breadcrumbs` navigasyonu entegre edildi. Medya ve Playlist sayfalarına hızlı arama kutusu (`/` kısayollu, temizleme butonlu, tip-toleranslı) ve dinamik filtre sayaçları eklendi.
+    4. **Form Standartları & Hata Önleme:** Eşleştirme kodunda otomatik büyük harf, 6 karakter maskeleme ve anlık inline doğrulama; medya yüklemesinde 200MB istemci tarafı ön kontrolü ve insan dilinde Türkçe hata çevirileri uygulandı.
+    5. **Erişilebilirlik (WCAG 2.1 AA) & Fitts Yasası:** Global `focus-visible` çerçeveleri, 4.5:1 kontrast standardı (`text-slate-400`), durum rozetlerinde rengin yanında net ikon (`Wifi`/`WifiOff`) + metin ve dokunmatik ekranlar için minimum 40-48px tıklama alanları sağlandı.
+    6. **TV Player Kiosk Deneyimi:** 4-5 metreden rahat okunan aralıklı 6 haneli kod kutusu, 3 adımlı infografik yönerge kartları ve bekleme ekranına Türkçe tarih/saat gösterimi eklendi.
+  - **Değiştirilen Dosyalar:** `client/src/index.css`, `client/src/App.tsx`, `client/src/components/ConfirmModal.tsx`, `client/src/components/Toast.tsx`, `client/src/components/Breadcrumbs.tsx`, `client/src/components/skeletons/PageSkeleton.tsx`, `client/src/pages/Media.tsx`, `client/src/pages/Playlists.tsx`, `client/src/pages/Groups.tsx`, `client/src/pages/Schedules.tsx`, `client/src/pages/Dashboard.tsx`, `client/src/pages/Screens.tsx`, `client/src/pages/Login.tsx`, `client/src/components/PairScreenModal.tsx`, `client/src/components/MediaUploadModal.tsx`, `client/src/components/PlaylistModal.tsx`, `client/src/components/ScheduleModal.tsx`, `client/src/components/EmergencyModal.tsx`, `client/src/components/ScreenPreviewModal.tsx`, `client/src/components/Navbar.tsx`, `player/index.html`, `player/style.css`, `player/player.js`, `todo_ux.md`, `PROJECT_MEMORY.md`
+  - **Doğrulama:** `npm run test:scheduler` (5/5 Başarılı), `npm run build` (0 hata, Server + Client tam derleme).
+
+- **[2026-10-21] - [Antigravity Agent]:**
+  - **Yapılan İş:** Kullanılabilirlik (Hick, Fitts, Jakob yasaları), WCAG 2.1 AA erişilebilirlik standartları, modern UI/UX prensipleri ve mikro-kopya (UX Writing) kuralları doğrultusunda kurum içi Dijital Bilgi Ekranı projesi için kapsamlı, aksiyon odaklı `todo_ux.md` yol haritası ve görev takip listesi oluşturuldu. 7 ana kategori, 5 adımlı tasarım doğrulama matrisi ve aşamalı fazlandırma planı sisteme işlendi.
+  - **Değiştirilen Dosyalar:** `todo_ux.md`, `PROJECT_MEMORY.md`
+  - **Doğrulama:** `npm run test:scheduler` (5/5 Başarılı), `npm run build` (0 hata, Server + Client tam derleme).
+
+- **2026-10-21 - Antigravity Agent:**
+  - **Yapılan İş:**
+    - Test simülasyonlarının (`loadSimulation.ts` ve `api.test.ts`) canlı veritabanında sahte TV ekranları (`TV #1 ... #10`, `Giriş Danışma TV`) bırakması engellendi; her iki teste de `finally` bloğunda test ekranlarını ve ilişkili atamalarını veritabanından kalıcı olarak temizleyen cleanup adımları eklendi. Canlı veritabanındaki tüm artık test TV'leri temizlendi.
+    - **"Çevrimdışı Diyor Ortasında Canlı Yayında Yazıyor" Mantıksal ve Görsel Hatanın Düzeltilmesi:**
+      - `Screens.tsx` içindeki 16:9 mini TV kartı önizleme çerçevesinde durum kontrolü `screen.status === 'ONLINE'` şartına bağlandı.
+      - TV çevrimdışı iken asla yeşil "● Canlı Yayında" yazmaması sağlandı; yerine `WifiOff` ikonu, soluk gri renkte "Son: [İçerik Başlığı]" ve kırmızı "Sinyal Yok (Çevrimdışı)" rozeti getirildi.
+      - Tablo görünümünde de çevrimdışı ekranların önceki içerikleri soluk ve bilgilendirici olarak düzeltildi.
+  - **Değiştirilen Dosyalar:**
+    - `server/src/tests/loadSimulation.ts`
+    - `server/src/tests/api.test.ts`
+    - `client/src/pages/Screens.tsx`
+    - `PROJECT_MEMORY.md`
+  - **Doğrulama:**
+    - `npm run test:scheduler`: 5/5 Başarılı
+    - `npm run test:api`: 6/6 Başarılı (Otomatik cleanup devrede)
+    - `npm run test:load`: 10/10 Başarılı (Otomatik cleanup devrede)
+    - `npm run build`: Server TypeScript + Client Vite bundle 0 hata ile derlendi.
+    - Veritabanı sorgusu ile sahte TV'lerin kalmadığı (yalnızca gerçek ekranların kaldığı) teyit edildi.
+
+- **2026-10-21 - Antigravity Agent:**
+  - **Yapılan İş:**
+    - Medya kütüphanesindeki görsel ve videolar için otomatik Thumbnail (küçük önizleme resmi) sistemi geliştirildi (`MediaThumbnail.tsx`).
+    - **Video Thumbnail Desteği:** HTML5 yerel `#t=0.5` video meta verisiyle videonun gerçek ilk karesi otomatik yakalanarak kapağa basıldı. Üzerine şık yarı saydam Play rozeti ve video süresi rozeti eklendi.
+    - **Görsel Thumbnail & Hata Koruması:** Resim yüklenirken arka planda skeleton pulse animasyonu, yükleme gecikmelerine karşı otomatik 2 aşamalı yeniden deneme (retry) ve hata durumunda kapkara ekran yerine zarif fallback ikonu sağlandı.
+    - **URL Web Mockup:** Web sayfası medyaları için mini tarayıcı pencereli alan adı ve bağlantı kartı oluşturuldu.
+    - `Media.tsx`, `MediaEditModal.tsx` ve `PlaylistModal.tsx` bileşenleri `MediaThumbnail` ile donatılarak hem medya kütüphanesinde hem oynatma listesi oluşturma ekranında görsel zenginlik sağlandı.
+  - **Değiştirilen/Eklenen Dosyalar:**
+    - `client/src/components/MediaThumbnail.tsx`
+    - `client/src/pages/Media.tsx`
+    - `client/src/components/MediaEditModal.tsx`
+    - `client/src/components/PlaylistModal.tsx`
+    - `PROJECT_MEMORY.md`
+  - **Doğrulama:**
+    - `npm run test:scheduler`: 5/5 Başarılı
+    - `npm run test:api`: 6/6 Başarılı
+    - `npm run test:load`: 10/10 Başarılı (501ms)
+    - `npm run build`: Server TypeScript + Client Vite bundle 0 hata ile derlendi.
+
+- **2026-10-21 - Antigravity Agent:**
+  - **Yapılan İş:**
+    - Medya kütüphanesindeki medyaların güncellenebilmesi (düzenlenebilmesi) özelliği eklendi.
+    - Sunucuda `PUT /api/media/:id` rotası `upload.single('file')` desteğiyle genişletildi; başlık (`title`), varsayılan süre (`duration`), web sayfası URL'si (`url`) ve isteğe bağlı olarak dosya değişimi (`file` - eski dosyanın diskten güvenli silinmesi ve yeni dosyanın kaydedilmesi) yetenekleri kazandırıldı. Güncelleme ve silme sonrasında bağlı TV'lere anlık manifest sync sinyali (`WsServer.notifyAllScreensSync()`) gönderilmesi sağlandı.
+    - Frontend'de `client/src/components/MediaEditModal.tsx` bileşeni geliştirildi. Medya türüne (IMAGE, VIDEO, URL) duyarlı düzenleme ve dosya değiştirme arayüzü sunuldu.
+    - `client/src/pages/Media.tsx` medya kartlarına "Düzenle" butonu eklendi, ayrıca önizleme penceresinden de tek tıkla düzenleme modalına geçiş imkanı sağlandı.
+    - `server/src/tests/api.test.ts` entegrasyon testine Test 6 (Medya oluşturma, PUT ile güncelleme ve doğrulama) adımı eklendi.
+  - **Değiştirilen/Eklenen Dosyalar:**
+    - `server/src/routes/mediaRoutes.ts`
+    - `server/src/tests/api.test.ts`
+    - `client/src/api.ts`
+    - `client/src/App.tsx`
+    - `client/src/pages/Media.tsx`
+    - `client/src/components/MediaEditModal.tsx`
+    - `PROJECT_MEMORY.md`
+  - **Doğrulama:**
+    - `npm run test:scheduler`: 5/5 Başarılı
+    - `npm run test:api`: 6/6 Başarılı (Yeni medya güncelleme testi dahil)
+    - `npm run test:load`: 10 TV Eşzamanlı Yük ve Anlık Sync (502ms) Başarılı
+    - `npm run build`: Server TypeScript + Client Vite bundle 0 hata ile derlendi.
+
+- **2026-10-21 - Antigravity Agent:**
+  - **Yapılan İş:**
+    - TV Ekranları Yönetiminin (Screens) UX/UI mimarisi 10 TV'lik kurum yapısına özel olarak sıfırdan basitleştirildi ve optimize edildi.
+    - **Tek Tıkla Doğrudan Yayın (Inline Quick-Assign):** Zamanlama sekmesine gitme zorunluluğu kaldırıldı. Ekran kartından veya kat başlığından açılır kutu ile anında playlist atanabilmesi sağlandı (`POST /api/screens/:id/quick-assign` ve `POST /api/groups/:id/quick-assign`).
+    - **3 Esnek Görünüm Modu:**
+      1. *Kat Gruplu Görünüm (Floors View - Varsayılan):* Katlara göre gruplama ve "Tüm Katın Yayınını Değiştir" kontrolü.
+      2. *Görsel TV Kartları (Cards View):* 16:9 mini TV önizleme çerçevesi ve durum göstergeleri.
+      3. *Kompakt Tablo Görünümü (Table View):* 10 TV'yi kaydırma yapmadan tek ekranda izleme ve inline kontrol imkanı.
+    - **Akıllı Eşleştirme Şeridi:** Eşleşmemiş bekleyen TV olduğunda sayfa üstünde tek tıkla adlandırma ve eşleme bildirimi.
+    - **Sadeleştirilmiş Ayarlar:** Seyrek kullanılan kat taşıma, unpair, silme işlemleri `···` ayarlar modalına taşındı.
+    - **Arama Çubuğu:** Ekran veya kat adına göre anlık filtreleme.
+  - **Değiştirilen Dosyalar:**
+    - `server/src/routes/screenRoutes.ts`
+    - `server/src/routes/groupRoutes.ts`
+    - `client/src/api.ts`
+    - `client/src/App.tsx`
+    - `client/src/pages/Screens.tsx`
+    - `client/src/components/PairScreenModal.tsx`
+    - `PROJECT_MEMORY.md`
+  - **Doğrulama:** `npm run test:scheduler` (5/5 Başarılı), Quick-assign veritabanı testi (3/3 Başarılı), `npm run build` (0 hata, Server + Client tam derleme).
 
 - **2026-10-21 - Antigravity Agent:**
   - **Yapılan İş:**

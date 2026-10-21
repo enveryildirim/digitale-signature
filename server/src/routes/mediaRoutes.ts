@@ -5,6 +5,7 @@ import { prisma } from '../db.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { upload } from '../middleware/upload.js';
 import { config } from '../config.js';
+import { WsServer } from '../ws/wsServer.js';
 
 const router = Router();
 router.use(authMiddleware);
@@ -87,19 +88,69 @@ router.post('/url', async (req, res) => {
   }
 });
 
-// PUT /api/media/:id (Rename or change default duration)
-router.put('/:id', async (req, res) => {
+// PUT /api/media/:id (Update title, duration, url, or replace file)
+router.put('/:id', upload.single('file'), async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, duration } = req.body;
+    const { title, duration, url } = req.body;
+
+    const existingMedia = await prisma.media.findUnique({ where: { id } });
+    if (!existingMedia) {
+      return res.status(404).json({ error: 'Medya bulunamadı.' });
+    }
+
+    const updateData: any = {};
+
+    // Update title
+    if (title !== undefined && title.trim()) {
+      updateData.title = title.trim();
+    }
+
+    // Update duration
+    if (duration !== undefined) {
+      const parsed = parseInt(duration, 10);
+      if (!isNaN(parsed) && parsed > 0) {
+        updateData.duration = parsed;
+      }
+    }
+
+    // Replace file if new file uploaded
+    if (req.file) {
+      // Delete old local file if present
+      if (existingMedia.url && existingMedia.url.startsWith('/uploads/')) {
+        const oldFilename = path.basename(existingMedia.url);
+        const oldFilePath = path.join(config.uploadDir, oldFilename);
+        if (fs.existsSync(oldFilePath)) {
+          try {
+            fs.unlinkSync(oldFilePath);
+          } catch (e) {
+            console.warn('Could not delete old file from disk:', e);
+          }
+        }
+      }
+
+      const isVideo = req.file.mimetype.startsWith('video/');
+      updateData.type = isVideo ? 'VIDEO' : 'IMAGE';
+      updateData.url = `/uploads/${req.file.filename}`;
+      updateData.mimeType = req.file.mimetype;
+      updateData.fileSize = req.file.size;
+    } else if (url !== undefined && url.trim()) {
+      // If URL media or updating url
+      try {
+        new URL(url.trim());
+      } catch {
+        return res.status(400).json({ error: 'Geçersiz URL formatı.' });
+      }
+      updateData.url = url.trim();
+    }
 
     const media = await prisma.media.update({
       where: { id },
-      data: {
-        title: title ? title.trim() : undefined,
-        duration: duration !== undefined ? parseInt(duration, 10) : undefined
-      }
+      data: updateData
     });
+
+    // Notify connected screens to refresh manifest
+    WsServer.notifyAllScreensSync();
 
     res.json(media);
   } catch (err: any) {
@@ -131,6 +182,9 @@ router.delete('/:id', async (req, res) => {
     }
 
     await prisma.media.delete({ where: { id } });
+
+    // Notify connected screens to refresh manifest
+    WsServer.notifyAllScreensSync();
 
     res.json({ message: 'Medya silindi.' });
   } catch (err: any) {

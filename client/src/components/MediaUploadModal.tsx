@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { X, UploadCloud, Globe, AlertCircle, FileVideo, FileImage, Type } from 'lucide-react';
 
 interface MediaUploadModalProps {
@@ -27,29 +27,47 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !loading) {
+        onClose();
+      }
+    };
+    if (isOpen) {
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [isOpen, loading, onClose]);
+
   if (!isOpen) return null;
+
+  const MAX_FILE_SIZE = 200 * 1024 * 1024; // 200 MB
+
+  const validateAndSetFile = (selected: File) => {
+    if (selected.size > MAX_FILE_SIZE) {
+      setError(`Seçtiğiniz dosya (${(selected.size / (1024 * 1024)).toFixed(1)} MB) 200 MB sınırını aşıyor. Lütfen daha küçük bir dosya seçin.`);
+      return;
+    }
+    setError(null);
+    setFile(selected);
+    if (!title) {
+      setTitle(selected.name.replace(/\.[^/.]+$/, ''));
+    }
+    if (selected.type.startsWith('video/')) {
+      setDuration(15);
+    }
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      const selected = e.target.files[0];
-      setFile(selected);
-      if (!title) {
-        setTitle(selected.name.replace(/\.[^/.]+$/, ''));
-      }
-      if (selected.type.startsWith('video/')) {
-        setDuration(15);
-      }
+      validateAndSetFile(e.target.files[0]);
     }
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      const selected = e.dataTransfer.files[0];
-      setFile(selected);
-      if (!title) {
-        setTitle(selected.name.replace(/\.[^/.]+$/, ''));
-      }
+      validateAndSetFile(e.dataTransfer.files[0]);
     }
   };
 
@@ -61,7 +79,7 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
       setLoading(true);
       if (activeTab === 'file') {
         if (!file) {
-          setError('Lütfen yüklenecek bir görsel veya video dosyası seçin.');
+          setError('Lütfen kütüphaneye yüklenecek bir görsel veya video dosyası seçin.');
           return;
         }
         const formData = new FormData();
@@ -71,7 +89,7 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
         await onUploadFile(formData);
       } else if (activeTab === 'url') {
         if (!title.trim() || !url.trim()) {
-          setError('Başlık ve geçerli bir URL zorunludur.');
+          setError('İçerik başlığı ve geçerli bir Web Sayfası URL adresi zorunludur.');
           return;
         }
         await onAddUrl({
@@ -95,20 +113,35 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
       }
       onClose();
     } catch (err: any) {
-      setError(err.message || 'Yükleme başarısız oldu.');
+      setError(err.message || 'Medya yükleme işlemi başarısız oldu.');
     } finally {
       setLoading(false);
     }
   };
 
+  const submitButtonLabels = {
+    file: 'Medyayı Kütüphaneye Yükle',
+    url: 'Web Sayfasını Kütüphaneye Ekle',
+    text: 'Metin Duyurusunu Oluştur'
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
+    <div
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in"
+    >
       <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl">
         <div className="flex items-center justify-between p-5 border-b border-slate-800">
           <div className="flex items-center gap-2">
             <h3 className="font-semibold text-white text-base">Medya Kütüphanesine Ekle</h3>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800">
+          <button
+            onClick={onClose}
+            disabled={loading}
+            aria-label="Kapat"
+            className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
+          >
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -120,7 +153,7 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
             onClick={() => { setActiveTab('file'); setError(null); }}
             className={`flex items-center gap-2 px-3.5 py-2.5 text-xs font-medium border-b-2 transition ${
               activeTab === 'file'
-                ? 'border-sky-500 text-sky-400'
+                ? 'border-sky-500 text-sky-400 font-semibold'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
@@ -132,7 +165,7 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
             onClick={() => { setActiveTab('url'); setError(null); }}
             className={`flex items-center gap-2 px-3.5 py-2.5 text-xs font-medium border-b-2 transition ${
               activeTab === 'url'
-                ? 'border-sky-500 text-sky-400'
+                ? 'border-sky-500 text-sky-400 font-semibold'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
@@ -144,7 +177,7 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
             onClick={() => { setActiveTab('text'); setError(null); }}
             className={`flex items-center gap-2 px-3.5 py-2.5 text-xs font-medium border-b-2 transition ${
               activeTab === 'text'
-                ? 'border-sky-500 text-sky-400'
+                ? 'border-sky-500 text-sky-400 font-semibold'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
@@ -155,7 +188,7 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
 
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           {error && (
-            <div className="flex items-center gap-2 p-3 text-xs text-red-400 bg-red-950/50 border border-red-800/60 rounded-lg">
+            <div className="flex items-center gap-2 p-3 text-xs text-rose-400 bg-rose-950/50 border border-rose-800/60 rounded-xl">
               <AlertCircle className="w-4 h-4 shrink-0" />
               <span>{error}</span>
             </div>
@@ -167,7 +200,7 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={handleDrop}
                 onClick={() => fileInputRef.current?.click()}
-                className="border-2 border-dashed border-slate-700 hover:border-sky-500/50 rounded-xl p-6 text-center cursor-pointer bg-slate-950/40 hover:bg-slate-950 transition"
+                className="border-2 border-dashed border-slate-700 hover:border-sky-500/50 rounded-2xl p-6 text-center cursor-pointer bg-slate-950/40 hover:bg-slate-950 transition"
               >
                 <input
                   ref={fileInputRef}
@@ -183,7 +216,7 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
                     ) : (
                       <FileImage className="w-10 h-10 text-emerald-400 mb-2" />
                     )}
-                    <span className="text-sm font-medium text-white">{file.name}</span>
+                    <span className="text-sm font-semibold text-white">{file.name}</span>
                     <span className="text-xs text-slate-400 mt-1">
                       {(file.size / (1024 * 1024)).toFixed(2)} MB • Değiştirmek için tıklayın
                     </span>
@@ -192,10 +225,10 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
                   <div className="flex flex-col items-center">
                     <UploadCloud className="w-10 h-10 text-slate-400 mb-2" />
                     <span className="text-sm font-medium text-slate-200">
-                      Dosyayı buraya sürükleyin veya <span className="text-sky-400">göz atın</span>
+                      Görsel veya videoyu buraya sürükleyin ya da <span className="text-sky-400 font-semibold">göz atın</span>
                     </span>
-                    <span className="text-xs text-slate-500 mt-1">
-                      Desteklenen: JPG, PNG, WebP, MP4 (Maks: 200 MB)
+                    <span className="text-xs text-slate-400 mt-1">
+                      Desteklenen formatlar: JPG, PNG, WebP, MP4, WebM (Maksimum: 200 MB)
                     </span>
                   </div>
                 )}
@@ -206,30 +239,34 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
           {activeTab === 'url' && (
             <div>
               <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                Web Sayfası URL <span className="text-red-400">*</span>
+                Web Sayfası URL Adresi <span className="text-rose-400">*</span>
               </label>
               <input
                 type="url"
+                inputMode="url"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://kurum-panosu.yerel.local"
-                className="w-full px-3.5 py-2 bg-slate-950 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-sky-500"
+                placeholder="https://kurum-panosu.yerel.local veya http://..."
+                className="input-standard font-mono text-xs"
               />
+              <p className="text-[11px] text-slate-400 mt-1">
+                TV ekranında tam sayfa gösterilecek yerel intranet panosu veya canlı URL adresi.
+              </p>
             </div>
           )}
 
           {activeTab === 'text' && (
             <div className="space-y-3">
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">
-                  Duyuru Metni / Mesaj <span className="text-red-400">*</span>
+                <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                  Duyuru Metni / Mesaj <span className="text-rose-400">*</span>
                 </label>
                 <textarea
                   rows={3}
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
                   placeholder="Yarın saat 14:00'te ana konferans salonunda genel bilgilendirme toplantısı yapılacaktır."
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-xs text-white focus:outline-none focus:border-sky-500"
+                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-sky-500 leading-relaxed"
                 />
               </div>
 
@@ -263,14 +300,14 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
 
           <div>
             <label className="block text-xs font-medium text-slate-300 mb-1.5">
-              İçerik Başlığı <span className="text-red-400">*</span>
+              İçerik Başlığı <span className="text-rose-400">*</span>
             </label>
             <input
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Ör: Kurum Tanıtım Videosu veya Genel Duyuru"
-              className="w-full px-3.5 py-2 bg-slate-950 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-sky-500"
+              placeholder="Ör: Kurum Tanıtım Videosu veya Yemekhane Menüsü"
+              className="input-standard"
             />
           </div>
 
@@ -280,28 +317,37 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
             </label>
             <input
               type="number"
+              inputMode="numeric"
               min={3}
               max={3600}
               value={duration}
               onChange={(e) => setDuration(Number(e.target.value))}
-              className="w-full px-3.5 py-2 bg-slate-950 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:border-sky-500"
+              className="input-standard font-mono"
             />
           </div>
 
-          <div className="pt-2 flex items-center justify-end gap-2.5">
+          <div className="pt-3 flex items-center justify-end gap-3 border-t border-slate-800">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-lg text-xs font-medium text-slate-300 hover:bg-slate-800 transition"
+              disabled={loading}
+              className="btn-secondary"
             >
-              İptal
+              Vazgeç
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="px-4 py-2 rounded-lg text-xs font-medium bg-sky-600 hover:bg-sky-500 text-white transition disabled:opacity-50"
+              className="btn-primary"
             >
-              {loading ? 'Yükleniyor...' : 'Kütüphaneye Ekle'}
+              {loading ? (
+                <>
+                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Yükleniyor...
+                </>
+              ) : (
+                submitButtonLabels[activeTab]
+              )}
             </button>
           </div>
         </form>

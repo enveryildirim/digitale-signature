@@ -73,6 +73,11 @@ export const api = {
     request<{ message: string }>(`/screens/${id}/sync`, {
       method: 'POST'
     }),
+  quickAssignScreen: (id: string, playlistId: string | null) =>
+    request<{ message: string; assignment?: Assignment }>(`/screens/${id}/quick-assign`, {
+      method: 'POST',
+      body: JSON.stringify({ playlistId })
+    }),
   syncAllScreens: () =>
     request<{ message: string }>('/screens/sync-all', {
       method: 'POST'
@@ -105,6 +110,11 @@ export const api = {
     request<{ message: string }>(`/groups/${id}`, {
       method: 'DELETE'
     }),
+  quickAssignGroup: (id: string, playlistId: string | null) =>
+    request<{ message: string; assignment?: Assignment }>(`/groups/${id}/quick-assign`, {
+      method: 'POST',
+      body: JSON.stringify({ playlistId })
+    }),
 
   // Media
   getMedia: () => request<Media[]>('/media'),
@@ -123,11 +133,13 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(data)
     }),
-  updateMedia: (id: string, data: { title?: string; duration?: number }) =>
-    request<Media>(`/media/${id}`, {
+  updateMedia: (id: string, data: { title?: string; duration?: number; url?: string } | FormData) => {
+    const isFormData = data instanceof FormData;
+    return request<Media>(`/media/${id}`, {
       method: 'PUT',
-      body: JSON.stringify(data)
-    }),
+      body: isFormData ? data : JSON.stringify(data)
+    });
+  },
   deleteMedia: (id: string) =>
     request<{ message: string }>(`/media/${id}`, {
       method: 'DELETE'
