@@ -1,0 +1,102 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id           String   @id @default(uuid())
+  username     String   @unique
+  email        String?  @unique
+  passwordHash String
+  name         String
+  role         String   @default("ADMIN") // ADMIN | EDITOR
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model ScreenGroup {
+  id          String       @id @default(uuid())
+  name        String       @unique
+  description String?
+  screens     Screen[]
+  assignments Assignment[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model Screen {
+  id            String       @id @default(uuid())
+  name          String
+  pairingCode   String?      @unique
+  deviceToken   String?      @unique
+  isPaired      Boolean      @default(false)
+  groupId       String?
+  group         ScreenGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  ipAddress     String?
+  lastSeen      DateTime?
+  status        String       @default("OFFLINE") // ONLINE | OFFLINE
+  currentMedia  String?
+  playerVersion String?
+  assignments   Assignment[]
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}
+
+model Media {
+  id        String         @id @default(uuid())
+  title     String
+  type      String         // IMAGE | VIDEO | URL
+  url       String         // Relative path /uploads/... or external URL
+  mimeType  String?
+  fileSize  Int?           // bytes
+  duration  Int            @default(10) // default seconds
+  items     PlaylistItem[]
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+}
+
+model Playlist {
+  id          String         @id @default(uuid())
+  name        String
+  description String?
+  items       PlaylistItem[]
+  assignments Assignment[]
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+}
+
+model PlaylistItem {
+  id         String   @id @default(uuid())
+  playlistId String
+  playlist   Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  mediaId    String
+  media      Media    @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  order      Int      // 0-indexed
+  duration   Int      // item-specific display duration in seconds
+  createdAt  DateTime @default(now())
+
+  @@unique([playlistId, order])
+}
+
+model Assignment {
+  id         String       @id @default(uuid())
+  playlistId String
+  playlist   Playlist     @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  screenId   String?
+  screen     Screen?      @relation(fields: [screenId], references: [id], onDelete: Cascade)
+  groupId    String?
+  group      ScreenGroup? @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  isDefault  Boolean      @default(false)
+  daysOfWeek String?      // Comma-separated: "1,2,3,4,5" (1=Monday .. 7=Sunday)
+  startTime  String?      // HH:mm format e.g. "08:30"
+  endTime    String?      // HH:mm format e.g. "18:00"
+  startDate  DateTime?
+  endDate    DateTime?
+  priority   Int          @default(1)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+}

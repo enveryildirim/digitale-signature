@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Digital Signage TV Kiosk
+Exec=/bin/bash /opt/kiosk/setup-chromium.sh 192.168.1.100:3001
+Hidden=false
+NoDisplay=false
+X-GNOME-Autostart-enabled=true
+

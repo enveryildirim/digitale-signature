@@ -1,0 +1,223 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+html, body {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background-color: #000000;
+  color: #ffffff;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  cursor: none; /* Hide cursor in kiosk mode */
+}
+
+/* Container & Slots */
+#player-container {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background-color: #000000;
+}
+
+.media-slot {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  transition: opacity 0.8s ease-in-out;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.media-slot.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Media Elements */
+.media-slot img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background-color: #000000;
+}
+
+.media-slot video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background-color: #000000;
+}
+
+.media-slot iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background-color: #ffffff;
+}
+
+/* Overlay Screens */
+.overlay-screen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
+  z-index: 100;
+  transition: opacity 0.5s ease;
+}
+
+.overlay-screen.hidden {
+  opacity: 0;
+  pointer-events: none;
+  display: none;
+}
+
+/* Pairing Screen */
+.pairing-content {
+  text-align: center;
+  background: rgba(30, 41, 59, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 3rem 4rem;
+  border-radius: 1.5rem;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(12px);
+  max-width: 650px;
+}
+
+.pairing-icon svg {
+  color: #38bdf8;
+  margin-bottom: 1.5rem;
+}
+
+.pairing-content h2 {
+  font-size: 2.2rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+  color: #f8fafc;
+}
+
+.pairing-desc {
+  font-size: 1.15rem;
+  color: #94a3b8;
+  margin-bottom: 2rem;
+  line-height: 1.6;
+}
+
+.code-box {
+  display: inline-block;
+  background: #0284c7;
+  color: #ffffff;
+  font-family: monospace;
+  font-size: 3.5rem;
+  font-weight: 800;
+  letter-spacing: 0.5rem;
+  padding: 1rem 2.5rem;
+  border-radius: 1rem;
+  box-shadow: 0 10px 25px -5px rgba(2, 132, 199, 0.5);
+  margin-bottom: 2rem;
+}
+
+.pairing-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  font-size: 1rem;
+  color: #cbd5e1;
+}
+
+.status-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #10b981;
+}
+
+.status-dot.pulsing {
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+  70% { transform: scale(1.1); box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+
+/* Idle Screen */
+.idle-content {
+  text-align: center;
+}
+
+.brand-logo svg {
+  color: #60a5fa;
+  margin-bottom: 1.5rem;
+}
+
+.idle-title {
+  font-size: 2.8rem;
+  font-weight: 700;
+  color: #f1f5f9;
+  margin-bottom: 1rem;
+}
+
+.idle-clock {
+  font-size: 5rem;
+  font-weight: 300;
+  font-variant-numeric: tabular-nums;
+  color: #38bdf8;
+  margin-bottom: 1.5rem;
+}
+
+.idle-badge {
+  display: inline-block;
+  padding: 0.6rem 1.6rem;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #94a3b8;
+  font-size: 1.1rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.screen-info {
+  margin-top: 1.5rem;
+  font-size: 0.95rem;
+  color: #64748b;
+}
+
+/* Status Pill */
+.status-pill {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  background: rgba(15, 23, 42, 0.85);
+  color: #e2e8f0;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  font-size: 0.85rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  z-index: 1000;
+  transition: opacity 0.3s;
+}
+
+.status-pill.hidden {
+  opacity: 0;
+  pointer-events: none;
+}

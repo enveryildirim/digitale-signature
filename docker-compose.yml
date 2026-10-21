@@ -1,0 +1,19 @@
+services:
+  digital-signage:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: digital-signage-server
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+      - DATABASE_URL=file:/app/data/signage.db
+      - JWT_SECRET=kurum-dijital-bilgi-ekrani-secret-key-2026
+      - UPLOAD_DIR=/app/uploads
+      - NODE_ENV=production
+    volumes:
+      - ./data:/app/data
+      - ./uploads:/app/uploads
+

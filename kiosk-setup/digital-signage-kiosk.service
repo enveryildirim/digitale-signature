@@ -1,0 +1,17 @@
+[Unit]
+Description=Kurum Ici Dijital Bilgi Ekrani TV Kiosk Servisi
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/pi/.Xauthority
+ExecStart=/bin/bash /opt/kiosk/setup-chromium.sh 192.168.1.100:3001
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=graphical.target
+

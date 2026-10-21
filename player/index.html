@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dijital Bilgi Ekranı Player</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Container for playing media -->
+  <div id="player-container">
+    <!-- Active media element slot 1 -->
+    <div id="slot-a" class="media-slot active"></div>
+    <!-- Active media element slot 2 for cross-fade -->
+    <div id="slot-b" class="media-slot"></div>
+  </div>
+
+  <!-- Fallback Screen: When no playlist is assigned -->
+  <div id="idle-screen" class="overlay-screen hidden">
+    <div class="idle-content">
+      <div class="brand-logo">
+        <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect>
+          <polyline points="17 2 12 7 7 2"></polyline>
+        </svg>
+      </div>
+      <h1 class="idle-title">Kurum İçi Bilgi Ekranı</h1>
+      <p id="idle-clock" class="idle-clock">--:--</p>
+      <div class="idle-badge">Yayın Bekleniyor</div>
+      <p id="idle-screen-info" class="screen-info"></p>
+    </div>
+  </div>
+
+  <!-- Pairing Screen: When TV is not paired yet -->
+  <div id="pairing-screen" class="overlay-screen hidden">
+    <div class="pairing-content">
+      <div class="pairing-icon">
+        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+        </svg>
+      </div>
+      <h2>Ekran Eşleştirme Kodu</h2>
+      <p class="pairing-desc">Bu ekranı panele eklemek için aşağıdaki 6 haneli kodu Admin Paneline giriniz:</p>
+      <div id="pairing-code-display" class="code-box">------</div>
+      <div class="pairing-status">
+        <span class="status-dot pulsing"></span>
+        <span id="pairing-status-text">Sunucuya bağlanıyor...</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Status pill (only shown momentarily on status changes or errors) -->
+  <div id="status-pill" class="status-pill hidden"></div>
+
+  <script src="player.js"></script>
+</body>
+</html>
