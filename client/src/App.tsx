@@ -13,6 +13,8 @@ import { PairScreenModal } from './components/PairScreenModal';
 import { MediaUploadModal } from './components/MediaUploadModal';
 import { PlaylistModal } from './components/PlaylistModal';
 import { ScheduleModal } from './components/ScheduleModal';
+import { EmergencyModal } from './components/EmergencyModal';
+import { ScreenPreviewModal } from './components/ScreenPreviewModal';
 import { CheckCircle2, AlertCircle } from 'lucide-react';
 
 export const App: React.FC = () => {
@@ -30,6 +32,7 @@ export const App: React.FC = () => {
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [isEmergencyActive, setIsEmergencyActive] = useState<boolean>(false);
 
   // Modals
   const [isPairModalOpen, setIsPairModalOpen] = useState(false);
@@ -37,6 +40,8 @@ export const App: React.FC = () => {
   const [isPlaylistModalOpen, setIsPlaylistModalOpen] = useState(false);
   const [editingPlaylist, setEditingPlaylist] = useState<Playlist | null>(null);
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
+  const [isEmergencyModalOpen, setIsEmergencyModalOpen] = useState(false);
+  const [previewingScreen, setPreviewingScreen] = useState<Screen | null>(null);
 
   // Toast
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -49,18 +54,20 @@ export const App: React.FC = () => {
   const loadAllData = async () => {
     if (!token) return;
     try {
-      const [screensData, groupsData, mediaData, playlistsData, assignmentsData] = await Promise.all([
+      const [screensData, groupsData, mediaData, playlistsData, assignmentsData, emergencyData] = await Promise.all([
         api.getScreens(),
         api.getGroups(),
         api.getMedia(),
         api.getPlaylists(),
-        api.getAssignments()
+        api.getAssignments(),
+        api.getEmergencyStatus().catch(() => ({ active: false, title: '', message: '', level: 'CRITICAL' }))
       ]);
       setScreens(screensData);
       setGroups(groupsData);
       setMedia(mediaData);
       setPlaylists(playlistsData);
       setAssignments(assignmentsData);
+      setIsEmergencyActive(emergencyData.active);
     } catch (err: any) {
       console.error('Veri yükleme hatası:', err);
     } finally {
@@ -164,6 +171,26 @@ export const App: React.FC = () => {
     loadAllData();
   };
 
+  const handleAddTextAnnouncement = async (data: { title: string; message: string; bgColor?: string; textColor?: string; duration?: number }) => {
+    await api.createTextAnnouncement(data);
+    showToast('Metin duyurusu başarıyla oluşturuldu.');
+    loadAllData();
+  };
+
+  const handleActivateEmergency = async (title: string, message: string) => {
+    await api.activateEmergency({ title, message });
+    setIsEmergencyActive(true);
+    showToast('🚨 ACİL DURUM YAYINI TÜM TVLERE İLETİLDİ!', 'error');
+    loadAllData();
+  };
+
+  const handleDeactivateEmergency = async () => {
+    await api.deactivateEmergency();
+    setIsEmergencyActive(false);
+    showToast('Acil durum yayını kaldırıldı, olağan yayına dönüldü.', 'success');
+    loadAllData();
+  };
+
   const handleDeleteMedia = async (id: string) => {
     if (confirm('Bu medyayı silmek istediğinize emin misiniz?')) {
       await api.deleteMedia(id);
@@ -224,6 +251,8 @@ export const App: React.FC = () => {
         onSyncAll={handleSyncAll}
         onlineCount={onlineScreensCount}
         totalScreens={totalPairedScreens}
+        isEmergencyActive={isEmergencyActive}
+        onOpenEmergencyModal={() => setIsEmergencyModalOpen(true)}
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -257,6 +286,7 @@ export const App: React.FC = () => {
                 onUnpairScreen={handleUnpairScreen}
                 onDeleteScreen={handleDeleteScreen}
                 onUpdateScreenGroup={handleUpdateScreenGroup}
+                onPreviewScreen={(s) => setPreviewingScreen(s)}
               />
             )}
 
@@ -328,6 +358,7 @@ export const App: React.FC = () => {
         onClose={() => setIsUploadModalOpen(false)}
         onUploadFile={handleUploadFile}
         onAddUrl={handleAddUrl}
+        onAddTextAnnouncement={handleAddTextAnnouncement}
       />
 
       <PlaylistModal
@@ -345,6 +376,20 @@ export const App: React.FC = () => {
         screens={screens.filter((s) => s.isPaired)}
         groups={groups}
         onSave={handleSaveSchedule}
+      />
+
+      <EmergencyModal
+        isOpen={isEmergencyModalOpen}
+        onClose={() => setIsEmergencyModalOpen(false)}
+        isActive={isEmergencyActive}
+        onActivate={handleActivateEmergency}
+        onDeactivate={handleDeactivateEmergency}
+      />
+
+      <ScreenPreviewModal
+        isOpen={previewingScreen !== null}
+        onClose={() => setPreviewingScreen(null)}
+        screen={previewingScreen}
       />
     </div>
   );

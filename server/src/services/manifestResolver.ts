@@ -1,10 +1,12 @@
 import crypto from 'crypto';
 import { prisma } from '../db.js';
+import { EmergencyService, EmergencyAlert } from './emergencyService.js';
 
 export interface ManifestResult {
   screenId: string;
   screenName: string;
   groupName: string | null;
+  emergency?: EmergencyAlert | null;
   playlist: {
     id: string;
     name: string;
@@ -28,6 +30,7 @@ export class ManifestResolver {
   /**
    * Evaluates active assignments for a screen at a given timestamp.
    * Priority:
+   * 0. Emergency Alert Override (SCH-5)
    * 1. Screen-specific scheduled rule
    * 2. Group-specific scheduled rule
    * 3. Screen-specific default assignment
@@ -43,6 +46,19 @@ export class ManifestResolver {
 
     if (!screen) {
       throw new Error('Ekran bulunamadı.');
+    }
+
+    // Level 0: Global Emergency Override (SCH-5)
+    const emergency = EmergencyService.getState();
+    if (emergency.active) {
+      return {
+        screenId: screen.id,
+        screenName: screen.name,
+        groupName: screen.group ? screen.group.name : null,
+        emergency,
+        playlist: null,
+        hash: `emergency-${emergency.activatedAt ? emergency.activatedAt.getTime() : 'active'}`
+      };
     }
 
     // Fetch all assignments for this screen or its group

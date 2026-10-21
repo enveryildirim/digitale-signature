@@ -3,9 +3,31 @@ import { prisma } from '../db.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { PairingService } from '../services/pairingService.js';
 import { WsServer } from '../ws/wsServer.js';
+import { EmergencyService } from '../services/emergencyService.js';
 
 const router = Router();
 router.use(authMiddleware);
+
+// GET /api/screens/emergency/status
+router.get('/emergency/status', (_req, res) => {
+  res.json(EmergencyService.getState());
+});
+
+// POST /api/screens/emergency/activate
+router.post('/emergency/activate', (req, res) => {
+  const { title, message, level } = req.body;
+  if (!title || !message) {
+    return res.status(400).json({ error: 'Acil durum başlığı ve mesajı zorunludur.' });
+  }
+  const state = EmergencyService.activate(title, message, level || 'CRITICAL');
+  res.json({ message: 'Acil durum yayını tüm TV ekranlarına basıldı.', state });
+});
+
+// POST /api/screens/emergency/deactivate
+router.post('/emergency/deactivate', (_req, res) => {
+  const state = EmergencyService.deactivate();
+  res.json({ message: 'Acil durum yayını kaldırıldı, olağan yayına dönüldü.', state });
+});
 
 // GET /api/screens
 router.get('/', async (_req, res) => {

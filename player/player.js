@@ -3,7 +3,9 @@
   'use strict';
 
   // State Variables
-  let deviceToken = localStorage.getItem('signage_device_token') || null;
+  const urlParams = new URLSearchParams(window.location.search);
+  const paramToken = urlParams.get('token');
+  let deviceToken = paramToken || localStorage.getItem('signage_device_token') || null;
   let currentScreenId = localStorage.getItem('signage_screen_id') || null;
   let activeManifest = null;
   let playlistItems = [];
@@ -308,6 +310,25 @@
   }
 
   function applyManifest(manifest) {
+    // Check Emergency Override (SCH-5)
+    const emergencyScreen = document.getElementById('emergency-screen');
+    const emergencyTitle = document.getElementById('emergency-title');
+    const emergencyMessage = document.getElementById('emergency-message');
+
+    if (manifest.emergency && manifest.emergency.active) {
+      if (itemTimer) {
+        clearTimeout(itemTimer);
+        itemTimer = null;
+      }
+      if (emergencyTitle) emergencyTitle.textContent = manifest.emergency.title || 'ACİL DURUM';
+      if (emergencyMessage) emergencyMessage.textContent = manifest.emergency.message || '';
+      if (emergencyScreen) emergencyScreen.classList.remove('hidden');
+      idleScreen.classList.add('hidden');
+      return;
+    } else {
+      if (emergencyScreen) emergencyScreen.classList.add('hidden');
+    }
+
     if (manifest.screenName && idleInfo) {
       idleInfo.textContent = `${manifest.screenName} ${manifest.groupName ? '(' + manifest.groupName + ')' : ''}`;
     }

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Tv, Plus, RefreshCw, Unlink, Trash2, CheckCircle2, AlertTriangle, Clock } from 'lucide-react';
+import { Tv, Plus, RefreshCw, Unlink, Trash2, CheckCircle2, AlertTriangle, Clock, Eye } from 'lucide-react';
 import { Screen, ScreenGroup } from '../types';
 
 interface ScreensProps {
@@ -11,6 +11,7 @@ interface ScreensProps {
   onUnpairScreen: (id: string) => void;
   onDeleteScreen: (id: string) => void;
   onUpdateScreenGroup: (id: string, groupId: string | null) => void;
+  onPreviewScreen?: (screen: Screen) => void;
 }
 
 export const Screens: React.FC<ScreensProps> = ({
@@ -21,7 +22,8 @@ export const Screens: React.FC<ScreensProps> = ({
   onSyncAll,
   onUnpairScreen,
   onDeleteScreen,
-  onUpdateScreenGroup
+  onUpdateScreenGroup,
+  onPreviewScreen
 }) => {
   const [filter, setFilter] = useState<'all' | 'online' | 'offline' | 'unpaired'>('all');
 
@@ -208,14 +210,26 @@ export const Screens: React.FC<ScreensProps> = ({
 
               {/* Actions Footer */}
               <div className="mt-5 pt-3 border-t border-slate-800/80 flex items-center justify-between">
-                <button
-                  onClick={() => onSyncScreen(screen.id)}
-                  title="TV Yayınını Hemen Güncelle"
-                  className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition"
-                >
-                  <RefreshCw className="w-3.5 h-3.5 text-sky-400" />
-                  Yenile
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => onSyncScreen(screen.id)}
+                    title="TV Yayınını Hemen Güncelle"
+                    className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5 text-sky-400" />
+                    Yenile
+                  </button>
+                  {onPreviewScreen && (
+                    <button
+                      onClick={() => onPreviewScreen(screen)}
+                      title="Canlı TV Simülasyonunu Aç"
+                      className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition"
+                    >
+                      <Eye className="w-3.5 h-3.5 text-emerald-400" />
+                      Önizle
+                    </button>
+                  )}
+                </div>
 
                 <div className="flex items-center gap-1">
                   {screen.isPaired && (

@@ -1,22 +1,26 @@
 import React, { useState, useRef } from 'react';
-import { X, UploadCloud, Globe, AlertCircle, FileVideo, FileImage } from 'lucide-react';
+import { X, UploadCloud, Globe, AlertCircle, FileVideo, FileImage, Type } from 'lucide-react';
 
 interface MediaUploadModalProps {
   isOpen: boolean;
   onClose: () => void;
   onUploadFile: (formData: FormData) => Promise<void>;
   onAddUrl: (data: { title: string; url: string; duration?: number }) => Promise<void>;
+  onAddTextAnnouncement?: (data: { title: string; message: string; bgColor?: string; textColor?: string; duration?: number }) => Promise<void>;
 }
 
 export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
   isOpen,
   onClose,
   onUploadFile,
-  onAddUrl
+  onAddUrl,
+  onAddTextAnnouncement
 }) => {
-  const [activeTab, setActiveTab] = useState<'file' | 'url'>('file');
+  const [activeTab, setActiveTab] = useState<'file' | 'url' | 'text'>('file');
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState('');
+  const [message, setMessage] = useState('');
+  const [bgColor, setBgColor] = useState('#0f172a');
   const [duration, setDuration] = useState(10);
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
@@ -30,7 +34,6 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
       const selected = e.target.files[0];
       setFile(selected);
       if (!title) {
-        // Strip extension from filename for default title
         setTitle(selected.name.replace(/\.[^/.]+$/, ''));
       }
       if (selected.type.startsWith('video/')) {
@@ -66,7 +69,7 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
         formData.append('title', title || file.name);
         formData.append('duration', String(duration));
         await onUploadFile(formData);
-      } else {
+      } else if (activeTab === 'url') {
         if (!title.trim() || !url.trim()) {
           setError('Başlık ve geçerli bir URL zorunludur.');
           return;
@@ -76,6 +79,19 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
           url: url.trim(),
           duration: Number(duration) || 15
         });
+      } else if (activeTab === 'text') {
+        if (!title.trim() || !message.trim()) {
+          setError('Duyuru başlığı ve açıklama metni zorunludur.');
+          return;
+        }
+        if (onAddTextAnnouncement) {
+          await onAddTextAnnouncement({
+            title: title.trim(),
+            message: message.trim(),
+            bgColor,
+            duration: Number(duration) || 12
+          });
+        }
       }
       onClose();
     } catch (err: any) {
@@ -102,26 +118,38 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
           <button
             type="button"
             onClick={() => { setActiveTab('file'); setError(null); }}
-            className={`flex items-center gap-2 px-4 py-2.5 text-xs font-medium border-b-2 transition ${
+            className={`flex items-center gap-2 px-3.5 py-2.5 text-xs font-medium border-b-2 transition ${
               activeTab === 'file'
                 ? 'border-sky-500 text-sky-400'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
             <UploadCloud className="w-4 h-4" />
-            Görsel / Video Dosyası
+            Dosya Yükle
           </button>
           <button
             type="button"
             onClick={() => { setActiveTab('url'); setError(null); }}
-            className={`flex items-center gap-2 px-4 py-2.5 text-xs font-medium border-b-2 transition ${
+            className={`flex items-center gap-2 px-3.5 py-2.5 text-xs font-medium border-b-2 transition ${
               activeTab === 'url'
                 ? 'border-sky-500 text-sky-400'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
             <Globe className="w-4 h-4" />
-            Web Sayfası / Canlı URL
+            Web Sayfası (URL)
+          </button>
+          <button
+            type="button"
+            onClick={() => { setActiveTab('text'); setError(null); }}
+            className={`flex items-center gap-2 px-3.5 py-2.5 text-xs font-medium border-b-2 transition ${
+              activeTab === 'text'
+                ? 'border-sky-500 text-sky-400'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Type className="w-4 h-4" />
+            Metin Duyurusu
           </button>
         </div>
 
@@ -133,7 +161,7 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
             </div>
           )}
 
-          {activeTab === 'file' ? (
+          {activeTab === 'file' && (
             <div>
               <div
                 onDragOver={(e) => e.preventDefault()}
@@ -173,7 +201,9 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
                 )}
               </div>
             </div>
-          ) : (
+          )}
+
+          {activeTab === 'url' && (
             <div>
               <label className="block text-xs font-medium text-slate-300 mb-1.5">
                 Web Sayfası URL <span className="text-red-400">*</span>
@@ -185,9 +215,49 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
                 placeholder="https://kurum-panosu.yerel.local"
                 className="w-full px-3.5 py-2 bg-slate-950 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-sky-500"
               />
-              <p className="text-[11px] text-slate-400 mt-1">
-                Sayfanın iframe içinde gösterilebilmesi için X-Frame-Options kısıtlaması olmamalıdır.
-              </p>
+            </div>
+          )}
+
+          {activeTab === 'text' && (
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1">
+                  Duyuru Metni / Mesaj <span className="text-red-400">*</span>
+                </label>
+                <textarea
+                  rows={3}
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  placeholder="Yarın saat 14:00'te ana konferans salonunda genel bilgilendirme toplantısı yapılacaktır."
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-xs text-white focus:outline-none focus:border-sky-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                  Arka Plan Rengi
+                </label>
+                <div className="flex items-center gap-2">
+                  {[
+                    { color: '#0f172a', name: 'Kurumsal Koyu' },
+                    { color: '#1e3a8a', name: 'Mavi' },
+                    { color: '#064e3b', name: 'Yeşil' },
+                    { color: '#701a75', name: 'Mor' },
+                    { color: '#881337', name: 'Bordo' }
+                  ].map((c) => (
+                    <button
+                      key={c.color}
+                      type="button"
+                      onClick={() => setBgColor(c.color)}
+                      style={{ backgroundColor: c.color }}
+                      className={`w-7 h-7 rounded-full border-2 transition ${
+                        bgColor === c.color ? 'border-sky-400 scale-110 shadow-lg' : 'border-slate-700'
+                      }`}
+                      title={c.name}
+                    />
+                  ))}
+                </div>
+              </div>
             </div>
           )}
 
@@ -199,7 +269,7 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Ör: Kurum Tanıtım Videosu"
+              placeholder="Ör: Kurum Tanıtım Videosu veya Genel Duyuru"
               className="w-full px-3.5 py-2 bg-slate-950 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-sky-500"
             />
           </div>

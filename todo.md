@@ -163,9 +163,9 @@ Bu belge, **Kurum İçi Dijital Bilgi Ekranı PRD v1.0** gereksinimlerinin Paret
 
 ---
 
-## 🌟 Faz 9: İterasyon 1 Geliştirmeleri (P1 - İleride)
+## 🌟 Faz 9: İterasyon 1 Geliştirmeleri (P1)
 
-- [ ] **9.1 Metin Duyuru Şablonu (MED-6):** Başlık + metin + arka plan rengi ile hızlı duyuru
-- [ ] **9.2 Ekran Önizleme (SCR-6):** TV'de anlık ne oynatıldığının panelde canlı simülasyonu
-- [ ] **9.3 Acil Durum Duyurusu (SCH-5):** Tek tuşla tüm katlardaki ekranlara acil anons basma
-- [ ] **9.4 Çevrimdışı Alarm Bildirimi (MON-2):** TV 15 dakikadan uzun süre çevrimdışı kalırsa e-posta bildirimi
+- [x] **9.1 Metin Duyuru Şablonu (MED-6):** Başlık + metin + arka plan rengi ile vektörel SVG duyuru kartı oluşturma
+- [x] **9.2 Ekran Önizleme (SCR-6):** TV'de anlık ne oynatıldığının panelde canlı 16:9 TV simülasyonu
+- [x] **9.3 Acil Durum Duyurusu (SCH-5):** Tek tuşla tüm katlardaki ekranlara anlık acil durum anonsu basma (Emergency Override)
+- [ ] **9.4 Çevrimdışı Alarm Bildirimi (MON-2):** TV 15 dakikadan uzun süre çevrimdışı kalırsa harici bildirim (Faz 2)

@@ -77,6 +77,17 @@ export const api = {
     request<{ message: string }>('/screens/sync-all', {
       method: 'POST'
     }),
+  getEmergencyStatus: () =>
+    request<{ active: boolean; title: string; message: string; level: string }>('/screens/emergency/status'),
+  activateEmergency: (data: { title: string; message: string; level?: string }) =>
+    request<{ message: string; state: any }>('/screens/emergency/activate', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+  deactivateEmergency: () =>
+    request<{ message: string; state: any }>('/screens/emergency/deactivate', {
+      method: 'POST'
+    }),
 
   // Groups
   getGroups: () => request<ScreenGroup[]>('/groups'),
@@ -104,6 +115,11 @@ export const api = {
     }),
   addUrlMedia: (data: { title: string; url: string; duration?: number }) =>
     request<Media>('/media/url', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+  createTextAnnouncement: (data: { title: string; message: string; bgColor?: string; textColor?: string; duration?: number }) =>
+    request<Media>('/media/text-announcement', {
       method: 'POST',
       body: JSON.stringify(data)
     }),

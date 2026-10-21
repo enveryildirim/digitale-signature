@@ -10,6 +10,8 @@ interface NavbarProps {
   onSyncAll: () => void;
   onlineCount: number;
   totalScreens: number;
+  isEmergencyActive?: boolean;
+  onOpenEmergencyModal?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -19,7 +21,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   onLogout,
   onSyncAll,
   onlineCount,
-  totalScreens
+  totalScreens,
+  isEmergencyActive = false,
+  onOpenEmergencyModal
 }) => {
   const navItems = [
     { id: 'dashboard', label: 'Genel Bakış', icon: LayoutDashboard },
@@ -52,6 +56,20 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Quick Actions & User */}
           <div className="flex items-center space-x-3">
+            {onOpenEmergencyModal && (
+              <button
+                onClick={onOpenEmergencyModal}
+                title="Tüm TV'lere acil durum anonsu bas veya kaldır"
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg border transition ${
+                  isEmergencyActive
+                    ? 'bg-red-600 text-white border-red-500 animate-pulse shadow-lg shadow-red-600/50'
+                    : 'bg-red-950/40 text-red-400 hover:bg-red-900/60 border-red-800/80'
+                }`}
+              >
+                🚨 {isEmergencyActive ? 'Acil Yayın Aktif' : 'Acil Durum'}
+              </button>
+            )}
+
             <button
               onClick={onSyncAll}
               title="Tüm ekranlara yayın yenileme sinyali gönder"

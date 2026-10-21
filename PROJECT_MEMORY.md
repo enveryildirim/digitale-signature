@@ -177,13 +177,29 @@ Sistem üzerinde 3 katmanlı otomatik doğrulama testi koşturulmuştur:
 
 ## 6. Geliştirici & Ajan Notları (Changelog)
 
-- **2026-10-21:**
-  - Proje iskeleti, monorepo ve veritabanı şeması oluşturuldu.
-  - SQLite WAL modu ve Prisma ORM yapılandırıldı.
-  - Kimlik doğrulama (`admin`/`admin123`), rol bazlı yetkilendirme kodlandı.
-  - 6 haneli TV eşleştirme motoru ve WebSocket anlık sync kanalı yazıldı.
-  - Çift tamponlu (cross-fade), Service Worker destekli TV Player geliştirildi.
-  - React + Tailwind CSS Admin Paneli (Dashboard, Screens, Groups, Media, Playlists, Schedules) tamamlandı.
-  - Scheduler, API ve 10-TV yük testleri başarıyla koşturuldu.
-  - `PROJECT_MEMORY.md` ve `AGENTS.md` kılavuzları oluşturuldu.
+- **2026-10-21 - Antigravity Agent:**
+  - **Yapılan İş:**
+    - Faz 0 - Faz 8 arasındaki tüm P0 MVP gereksinimleri (Auth, Ekran Eşleştirme, Medya Kütüphanesi, Playlist, Zamanlama Çözümleme Motoru, Kiosk TV Player, Service Worker Offline Caching, Admin Paneli, Docker & Kiosk Scriptleri) tamamlandı.
+    - Faz 9 P1 özellikleri eklendi:
+      - **Acil Durum Duyurusu (SCH-5):** `EmergencyService.ts` ve tek tıkla tüm TV'lerin yayınını ezerek kırmızı acil durum ekranı açan WebSocket kanalı ve `EmergencyModal.tsx`.
+      - **Metin Duyuru Şablonu (MED-6):** Çözünürlük bağımsız, 1080p/4K kristal netliğinde vektörel SVG duyuru kartı üreten `POST /api/media/text-announcement` servisi ve `MediaUploadModal.tsx` sekmesi.
+      - **Canlı Ekran Önizleme (SCR-6):** Yönetim panelinde ekran kartlarından açılan 16:9 TV çerçevesinde canlı player simülasyonu (`ScreenPreviewModal.tsx`).
+    - Kalıcı proje hafızası `PROJECT_MEMORY.md` ve yapay zeka ajan çalışma yönergesi `AGENTS.md` oluşturuldu.
+  - **Değiştirilen/Eklenen Dosyalar:**
+    - `server/src/services/emergencyService.ts`
+    - `server/src/services/manifestResolver.ts`
+    - `server/src/routes/screenRoutes.ts`
+    - `server/src/routes/mediaRoutes.ts`
+    - `player/index.html`, `player/style.css`, `player/player.js`
+    - `client/src/api.ts`, `client/src/App.tsx`
+    - `client/src/components/EmergencyModal.tsx`
+    - `client/src/components/ScreenPreviewModal.tsx`
+    - `client/src/components/MediaUploadModal.tsx`
+    - `client/src/components/Navbar.tsx`, `client/src/pages/Screens.tsx`
+    - `todo.md`, `PROJECT_MEMORY.md`, `AGENTS.md`
+  - **Doğrulama:**
+    - `npm run test:scheduler`: 5/5 Başarılı
+    - `npm run test:api`: 5/5 Başarılı
+    - `npm run test:load`: 10 TV Eşzamanlı Yük ve Anlık Sync (501ms) Başarılı
+    - `npm run build`: Server TypeScript ve Client Vite bundle 0 hata ile derlendi.
 
