@@ -5,6 +5,8 @@
   // State Variables
   const urlParams = new URLSearchParams(window.location.search);
   const paramToken = urlParams.get('token');
+  const isPreview = urlParams.get('preview') === 'true';
+
   let deviceToken = paramToken || localStorage.getItem('signage_device_token') || null;
   let currentScreenId = localStorage.getItem('signage_screen_id') || null;
   let activeManifest = null;
@@ -31,7 +33,7 @@
 
   // Helpers
   function showStatus(text, duration = 3000) {
-    if (!statusPill) return;
+    if (!statusPill || isPreview) return;
     statusPill.textContent = text;
     statusPill.classList.remove('hidden');
     setTimeout(() => {
@@ -47,13 +49,13 @@
     idleClock.textContent = `${hours}:${minutes}`;
   }
 
-  // Wake Lock API: Prevent TV display from sleeping
+  // Wake Lock API: Prevent TV display from sleeping (only for physical TV)
   async function requestWakeLock() {
+    if (isPreview) return;
     try {
       if ('wakeLock' in navigator) {
         wakeLock = await navigator.wakeLock.request('screen');
         wakeLock.addEventListener('release', () => {
-          // Re-request if released
           setTimeout(requestWakeLock, 2000);
         });
       }
@@ -63,13 +65,14 @@
   }
 
   document.addEventListener('visibilitychange', () => {
-    if (wakeLock !== null && document.visibilityState === 'visible') {
+    if (!isPreview && wakeLock !== null && document.visibilityState === 'visible') {
       requestWakeLock();
     }
   });
 
   // Nightly soft reload at 03:30 to clear Chromium memory leaks (PLR-7)
   function scheduleNightlyReload() {
+    if (isPreview) return;
     const now = new Date();
     const nextReload = new Date();
     nextReload.setHours(3, 30, 0, 0);
@@ -84,7 +87,7 @@
 
   // Service Worker Registration for Offline Caching
   function registerServiceWorker() {
-    if ('serviceWorker' in navigator) {
+    if (!isPreview && 'serviceWorker' in navigator) {
       navigator.serviceWorker.register('./sw.js')
         .then((reg) => {
           console.log('ServiceWorker registered:', reg.scope);
@@ -96,7 +99,7 @@
   }
 
   function precacheAssets(urls) {
-    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+    if (!isPreview && 'serviceWorker' in navigator && navigator.serviceWorker.controller) {
       navigator.serviceWorker.controller.postMessage({
         action: 'PRECACHE_MEDIA',
         urls: urls
@@ -128,10 +131,8 @@
       pairingCodeDisplay.textContent = data.pairingCode || '------';
       pairingStatusText.textContent = 'Panele kodun girilmesi bekleniyor...';
 
-      // Connect WebSocket to listen for instant pairing approval
       connectWebSocketForPairing(data.screenId);
 
-      // Also set up polling fallback every 5 seconds
       if (pollingTimer) clearInterval(pollingTimer);
       pollingTimer = setInterval(async () => {
         try {
@@ -143,7 +144,7 @@
             }
           }
         } catch (e) {
-          // ignore network glitches
+          // ignore
         }
       }, 5000);
 
@@ -183,8 +184,6 @@
     deviceToken = token;
     localStorage.setItem('signage_device_token', deviceToken);
     showStatus('Ekran başarıyla eşleştirildi!');
-
-    // Transition to main playback flow
     pairingScreen.classList.add('hidden');
     startPlayer();
   }
@@ -201,18 +200,21 @@
     pollingTimer = setInterval(fetchManifestAndSync, 30000);
   }
 
-  // WebSocket Connection for instant updates (PLR-2)
+  // WebSocket Connection for instant updates (PLR-2) and Live Playback Sync (SCR-6)
   function connectWebSocket() {
     if (!deviceToken) return;
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws/player?token=${encodeURIComponent(deviceToken)}`;
+    const previewParam = isPreview ? '&preview=true' : '';
+    const wsUrl = `${protocol}//${window.location.host}/ws/player?token=${encodeURIComponent(deviceToken)}${previewParam}`;
 
     try {
       ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {
-        console.log('Player WebSocket connected.');
-        sendHeartbeat();
+        console.log('Player WebSocket connected. isPreview:', isPreview);
+        if (!isPreview) {
+          sendHeartbeat();
+        }
       };
 
       ws.onmessage = (event) => {
@@ -221,6 +223,15 @@
           if (msg.action === 'SYNC_MANIFEST') {
             console.log('Instant manifest sync triggered via WebSocket.');
             fetchManifestAndSync();
+          } else if (msg.action === 'PLAYBACK_STATUS') {
+            // Preview Client: synchronize immediately with the real TV!
+            if (isPreview && playlistItems.length > 0) {
+              const targetIdx = msg.currentIndex;
+              if (targetIdx >= 0 && targetIdx < playlistItems.length && targetIdx !== currentIndex) {
+                const elapsedSec = msg.startedAt ? Math.max(0, (Date.now() - msg.startedAt) / 1000) : 0;
+                playItemAtIndex(targetIdx, elapsedSec);
+              }
+            }
           } else if (msg.action === 'UNPAIR') {
             handleUnpair();
           }
@@ -230,8 +241,10 @@
       };
 
       ws.onclose = () => {
-        console.log('WS closed. Reconnecting in 5s...');
-        setTimeout(connectWebSocket, 5000);
+        if (!isPreview) {
+          console.log('WS closed. Reconnecting in 5s...');
+          setTimeout(connectWebSocket, 5000);
+        }
       };
 
       ws.onerror = (err) => {
@@ -239,11 +252,12 @@
       };
     } catch (e) {
       console.warn('WS create error:', e);
-      setTimeout(connectWebSocket, 10000);
+      if (!isPreview) setTimeout(connectWebSocket, 10000);
     }
   }
 
   function handleUnpair() {
+    if (isPreview) return;
     localStorage.removeItem('signage_device_token');
     localStorage.removeItem('signage_screen_id');
     deviceToken = null;
@@ -256,12 +270,13 @@
 
   // Heartbeat every 30s (PLR-4)
   function startHeartbeat() {
+    if (isPreview) return;
     if (heartbeatTimer) clearInterval(heartbeatTimer);
     heartbeatTimer = setInterval(sendHeartbeat, 30000);
   }
 
   function sendHeartbeat() {
-    if (!deviceToken) return;
+    if (!deviceToken || isPreview) return;
     const currentItem = playlistItems[currentIndex];
     const payload = {
       action: 'HEARTBEAT',
@@ -270,18 +285,14 @@
       playerVersion: '1.0.0'
     };
 
-    // Try WS first
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify(payload));
     } else {
-      // Fallback to HTTP POST
       fetch('/api/player/heartbeat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
-      }).catch(() => {
-        // Network offline, heartbeat buffered
-      });
+      }).catch(() => {});
     }
   }
 
@@ -302,9 +313,8 @@
       applyManifest(manifest);
     } catch (err) {
       console.warn('Manifest fetch failed, continuing with cached playlist if any:', err);
-      // If we already have items in memory / cache, do not stop
       if (playlistItems.length > 0 && currentIndex === -1) {
-        playNextItem();
+        startSyncedPlayback();
       }
     }
   }
@@ -338,7 +348,6 @@
     const hash = manifest.hash || JSON.stringify(newItems.map(i => i.id));
 
     if (activeManifest && activeManifest.hash === hash) {
-      // No change in playlist items
       return;
     }
 
@@ -346,30 +355,73 @@
     playlistItems = newItems;
 
     if (playlistItems.length === 0) {
-      // No items to play: Show IDLE screen
       if (itemTimer) clearTimeout(itemTimer);
       currentIndex = -1;
       slotA.innerHTML = '';
       slotB.innerHTML = '';
       idleScreen.classList.remove('hidden');
     } else {
-      // Items present: Hide idle screen and start / update loop
       idleScreen.classList.add('hidden');
-
-      // Pre-cache media assets via Service Worker (PLR-3)
       const assetUrls = playlistItems.map(item => item.media.url);
       precacheAssets(assetUrls);
 
-      // If loop was not running, start it
+      // Start synchronized playback (ensuring preview shows what TV is playing right now!)
       if (currentIndex === -1 || !itemTimer) {
-        currentIndex = -1;
-        playNextItem();
+        startSyncedPlayback();
       }
     }
   }
 
-  // Play next item with double-buffering crossfade
-  function playNextItem() {
+  /**
+   * Starts playback synchronized with the physical TV or timeline wall-clock.
+   * Prevents restarting from item 0 on preview!
+   */
+  async function startSyncedPlayback() {
+    if (playlistItems.length === 0) return;
+
+    if (isPreview) {
+      try {
+        const res = await fetch(`/api/player/live-status?token=${encodeURIComponent(deviceToken)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.live && data.state) {
+            const elapsed = Math.max(0, (Date.now() - data.state.startedAt) / 1000);
+            if (elapsed < data.state.duration && data.state.currentIndex < playlistItems.length) {
+              console.log(`Preview: Synced with live TV at item ${data.state.currentIndex}, seek: ${elapsed.toFixed(1)}s`);
+              playItemAtIndex(data.state.currentIndex, elapsed);
+              return;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Could not fetch live-status, using wall-clock sync:', err);
+      }
+    }
+
+    // Deterministic Timeline (Wall-Clock) Sync:
+    // Guarantees all screens and previews without live socket are at the exact same item and second
+    const totalDuration = playlistItems.reduce((acc, it) => acc + (it.duration || it.media.duration || 10), 0);
+    if (totalDuration > 0) {
+      const nowSec = Math.floor(Date.now() / 1000);
+      const loopOffset = nowSec % totalDuration;
+      let accum = 0;
+      for (let i = 0; i < playlistItems.length; i++) {
+        const itemDur = playlistItems[i].duration || playlistItems[i].media.duration || 10;
+        if (loopOffset >= accum && loopOffset < accum + itemDur) {
+          const elapsedInItem = loopOffset - accum;
+          console.log(`Wall-clock sync: item ${i}, elapsed: ${elapsedInItem}s`);
+          playItemAtIndex(i, elapsedInItem);
+          return;
+        }
+        accum += itemDur;
+      }
+    }
+
+    playItemAtIndex(0, 0);
+  }
+
+  // Play specific item with seeking support (for preview & instant live sync)
+  function playItemAtIndex(index, seekSeconds = 0) {
     if (itemTimer) {
       clearTimeout(itemTimer);
       itemTimer = null;
@@ -380,12 +432,15 @@
       return;
     }
 
-    currentIndex = (currentIndex + 1) % playlistItems.length;
+    currentIndex = index % playlistItems.length;
     const item = playlistItems[currentIndex];
     const targetSlot = activeSlot === 'a' ? slotB : slotA;
     const outgoingSlot = activeSlot === 'a' ? slotA : slotB;
 
-    renderMediaIntoSlot(item, targetSlot, () => {
+    const durationSeconds = item.duration || item.media.duration || 10;
+    const remainingSeconds = Math.max(1, durationSeconds - seekSeconds);
+
+    renderMediaIntoSlot(item, targetSlot, seekSeconds, () => {
       // Transition complete: Cross-fade
       targetSlot.classList.add('active');
       outgoingSlot.classList.remove('active');
@@ -396,10 +451,20 @@
         outgoingSlot.innerHTML = '';
       }, 900);
 
-      // Schedule next item
-      const durationSeconds = item.duration || item.media.duration || 10;
+      // Report live playback to server so preview clients can follow
+      if (!isPreview && ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          action: 'PLAYBACK_STATUS',
+          token: deviceToken,
+          currentIndex: currentIndex,
+          mediaId: item.media.id,
+          mediaTitle: item.media.title,
+          startedAt: Date.now() - (seekSeconds * 1000),
+          duration: durationSeconds
+        }));
+      }
 
-      // For videos, video 'ended' event handles advance, but we also set a safety timeout
+      // Schedule next item
       if (item.media.type === 'VIDEO') {
         const videoEl = targetSlot.querySelector('video');
         if (videoEl) {
@@ -408,17 +473,22 @@
             console.warn('Video playback error, skipping in 2s');
             itemTimer = setTimeout(playNextItem, 2000);
           };
-          // Safety timeout in case ended doesn't fire
-          itemTimer = setTimeout(playNextItem, (durationSeconds + 2) * 1000);
+          itemTimer = setTimeout(playNextItem, (remainingSeconds + 2) * 1000);
           return;
         }
       }
 
-      itemTimer = setTimeout(playNextItem, durationSeconds * 1000);
+      itemTimer = setTimeout(playNextItem, remainingSeconds * 1000);
     });
   }
 
-  function renderMediaIntoSlot(item, slot, onReady) {
+  // Play next item in cyclic sequence
+  function playNextItem() {
+    const nextIdx = (currentIndex + 1) % playlistItems.length;
+    playItemAtIndex(nextIdx, 0);
+  }
+
+  function renderMediaIntoSlot(item, slot, seekSeconds, onReady) {
     slot.innerHTML = '';
     const media = item.media;
 
@@ -443,6 +513,13 @@
       video.controls = false;
 
       video.onloadeddata = () => {
+        if (seekSeconds > 0) {
+          try {
+            video.currentTime = seekSeconds;
+          } catch (e) {
+            console.warn('Video seek failed:', e);
+          }
+        }
         slot.appendChild(video);
         video.play().catch(e => console.warn('Autoplay prevented:', e));
         onReady();
@@ -463,11 +540,9 @@
         setTimeout(playNextItem, 2000);
       };
       slot.appendChild(iframe);
-      // Don't wait too long for external iframes to report load
       setTimeout(onReady, 1000);
 
     } else {
-      // Unknown type, advance
       setTimeout(playNextItem, 1000);
     }
   }

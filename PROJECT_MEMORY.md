@@ -160,6 +160,14 @@ tv-brodcast/
 - **Wake Lock API:** TV ekran koruyucusunun veya uyku modunun devreye girmesi tarayıcı düzeyinde engellenir.
 - **Gece Yenilemesi:** Her gece saat 03:30'da tarayıcı `location.reload()` ile kendini temizleyerek uzun süreli Chromium bellek şişmesini (memory leak) önler.
 
+### 4.4 Canlı TV Önizleme ve Gerçek Zamanlı Eşzamanlama (SCR-6)
+- **Sorun:** Önizleme ekranı açıldığında yayın sıfırdan (0. öğeden) başlarsa yönetici TV'nin o anki gerçek durumunu göremezdi.
+- **Çözüm (Çift Katmanlı Senkronizasyon):**
+  1. **WebSocket Durum Akışı:** Fiziksel TV her slayta geçtiğinde sunucuya `{ action: 'PLAYBACK_STATUS', currentIndex, mediaId, startedAt, duration }` bildirir.
+  2. **Canlı Durum Sorgulama:** Panelde "Önizle" butonuna tıklandığında önizleme player'ı `GET /api/player/live-status` uç noktası üzerinden TV'nin oynattığı öğeyi ve geçen saniyeyi (`elapsedSeconds`) çeker.
+  3. **Anlık Atlama ve Video Seek:** Önizleme doğrudan TV'nin oynattığı öğeye geçer; video ise `video.currentTime = seekSeconds` ile TV'nin o anki saniyesine sarar.
+  4. **Deterministik Zaman Çizgisi (Wall-Clock Fallback):** TV o an WebSocket'e bağlı olmasa dahi döngü toplam süresi üzerinden `Date.now() % totalDuration` matematiği ile o saniyede hangi slaytın gösterilmesi gerektiği hesaplanarak açılır. Yayın asla baştan başlamaz.
+
 ---
 
 ## 5. Doğrulama ve Test Sonuçları
@@ -176,6 +184,15 @@ Sistem üzerinde 3 katmanlı otomatik doğrulama testi koşturulmuştur:
 ---
 
 ## 6. Geliştirici & Ajan Notları (Changelog)
+
+- **2026-10-21 - Antigravity Agent:**
+  - **Yapılan İş:**
+    - Önizleme tıklandığında yayının baştan başlaması sorunu çözüldü.
+    - TV oynatıcısına anlık durum bildirme (`PLAYBACK_STATUS`), WebSocket canlı önizleme kanalı ve video `seekSeconds` desteği eklendi.
+    - Sunucuya `GET /api/player/live-status` uç noktası eklendi; önizleme player'ı açıldığında doğrudan TV'nin o anki öğesine ve saniyesine sarar.
+    - Deterministik Wall-Clock timeline senkronizasyon motoru entegre edildi.
+  - **Değiştirilen Dosyalar:** `server/src/ws/wsServer.ts`, `server/src/routes/playerRoutes.ts`, `player/player.js`, `client/src/components/ScreenPreviewModal.tsx`, `PROJECT_MEMORY.md`
+  - **Doğrulama:** `npm run test:scheduler` (5/5), `npm run test:api` (5/5), `npm run test:load` (10/10), `npm run build` (0 hata).
 
 - **2026-10-21 - Antigravity Agent:**
   - **Yapılan İş:**

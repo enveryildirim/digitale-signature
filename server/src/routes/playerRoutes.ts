@@ -3,8 +3,27 @@ import { prisma } from '../db.js';
 import { PairingService } from '../services/pairingService.js';
 import { ManifestResolver } from '../services/manifestResolver.js';
 import { HeartbeatService } from '../services/heartbeatService.js';
+import { WsServer } from '../ws/wsServer.js';
 
 const router = Router();
+
+// GET /api/player/live-status - Returns real-time playback state of the screen
+router.get('/live-status', async (req, res) => {
+  try {
+    const token = (req.query.token as string) || (req.headers['x-device-token'] as string);
+    if (!token) {
+      return res.status(400).json({ error: 'Token gerekli.' });
+    }
+    const state = await WsServer.getPlaybackStateByToken(token);
+    res.json({
+      live: Boolean(state),
+      state: state || null,
+      serverTime: Date.now()
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // POST /api/player/register - Called on initial TV launch without token
 router.post('/register', async (req, res) => {

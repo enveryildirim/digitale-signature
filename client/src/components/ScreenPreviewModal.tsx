@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Tv } from 'lucide-react';
+import { X, Tv, Radio } from 'lucide-react';
 import { Screen } from '../types';
 
 interface ScreenPreviewModalProps {
@@ -20,20 +20,27 @@ export const ScreenPreviewModal: React.FC<ScreenPreviewModalProps> = ({
       <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-4xl overflow-hidden shadow-2xl flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-slate-800">
-          <div className="flex items-center gap-2.5">
-            <div className="p-1.5 bg-sky-500/10 text-sky-400 rounded-lg">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-sky-500/10 text-sky-400 rounded-xl border border-sky-500/20">
               <Tv className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-semibold text-white text-sm">
-                Canlı Ekran Simülasyonu: {screen.name}
-              </h3>
-              <p className="text-[11px] text-slate-400">
-                {screen.group?.name || 'Bağımsız'} • {screen.status}
+              <div className="flex items-center gap-2">
+                <h3 className="font-semibold text-white text-sm">
+                  {screen.name}
+                </h3>
+                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950/80 text-emerald-400 border border-emerald-800">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+                  Canlı TV Senkronizasyonu
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                {screen.group?.name || 'Bağımsız TV'} • Durum: {screen.status}
+                {screen.currentMedia && ` • Oynatılan: ${screen.currentMedia}`}
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white p-1 rounded-lg">
+          <button onClick={onClose} className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -43,7 +50,7 @@ export const ScreenPreviewModal: React.FC<ScreenPreviewModalProps> = ({
           <div className="w-full max-w-3xl aspect-video bg-black rounded-xl border-4 border-slate-800 shadow-2xl relative overflow-hidden flex items-center justify-center">
             {screen.isPaired && screen.deviceToken ? (
               <iframe
-                src={`/player?preview=true&token=${screen.deviceToken}`}
+                src={`/player?preview=true&token=${screen.deviceToken}&_t=${Date.now()}`}
                 title={`Preview ${screen.name}`}
                 className="w-full h-full border-none pointer-events-none"
               />
@@ -57,9 +64,10 @@ export const ScreenPreviewModal: React.FC<ScreenPreviewModalProps> = ({
               </div>
             )}
           </div>
-          <p className="text-[11px] text-slate-500 mt-3 text-center">
-            TV'deki Chromium Kiosk oynatıcısının 16:9 canlı ekran görüntüsü.
-          </p>
+          <div className="flex items-center gap-2 mt-3 text-[11px] text-slate-400 text-center">
+            <Radio className="w-3.5 h-3.5 text-sky-400" />
+            <span>Fiziksel TV ekranı ile eşzamanlı canlı akış gösterilmektedir (Baştan başlatılmaz).</span>
+          </div>
         </div>
       </div>
     </div>
