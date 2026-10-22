@@ -31,6 +31,13 @@ app.use('/uploads', express.static(config.uploadDir));
 const playerStaticDir = path.resolve(process.cwd(), '../player');
 app.use('/player', express.static(playerStaticDir));
 
+// Serve favicon for root / browser requests
+const faviconPath = path.resolve(playerStaticDir, 'favicon.svg');
+app.get(['/favicon.ico', '/favicon.svg'], (_req, res) => {
+  res.setHeader('Content-Type', 'image/svg+xml');
+  res.sendFile(faviconPath);
+});
+
 // Mount REST API endpoints
 app.use('/api/auth', authRoutes);
 app.use('/api/screens', screenRoutes);

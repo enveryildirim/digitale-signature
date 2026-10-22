@@ -5,7 +5,8 @@ const STATIC_ASSETS = [
   './',
   './index.html',
   './style.css',
-  './player.js'
+  './player.js',
+  './favicon.svg'
 ];
 
 self.addEventListener('install', (event) => {

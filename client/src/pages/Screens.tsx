@@ -3,24 +3,23 @@ import {
   Tv,
   Plus,
   RefreshCw,
-  Unlink,
-  Trash2,
-  Clock,
-  Eye,
   Building2,
-  LayoutGrid,
-  List,
-  Settings,
-  X,
-  Search,
   Film,
-  Wifi,
   WifiOff,
-  Copy,
+  Edit2,
+  Trash2,
   Check,
-  ExternalLink
+  X,
+  ChevronRight,
+  Link2
 } from 'lucide-react';
 import { Screen, ScreenGroup, Playlist } from '../types';
+import { ScreenDetailModal } from '../components/ScreenDetailModal';
+import { EmptyState } from '../components/ui/EmptyState';
+import { FilterChips } from '../components/ui/FilterChips';
+import { formatLastSeen } from '../utils/format';
+
+const NEW_PLAYLIST = '__new__';
 
 interface ScreensProps {
   screens: Screen[];
@@ -34,9 +33,16 @@ interface ScreensProps {
   onUpdateScreen: (id: string, data: { name?: string; groupId?: string | null }) => Promise<void>;
   onQuickAssignScreen: (screenId: string, playlistId: string | null) => Promise<void>;
   onQuickAssignGroup: (groupId: string, playlistId: string | null) => Promise<void>;
-  onPreviewScreen?: (screen: Screen) => void;
-  onOpenPlaylistModal?: () => void;
+  onOpenPlaylistModal: () => void;
+  onCreateGroup: (data: { name: string }) => Promise<void>;
+  onUpdateGroup: (id: string, data: { name: string }) => Promise<void>;
+  onDeleteGroup: (id: string) => void;
 }
+
+type StatusFilter = 'all' | 'online' | 'offline';
+
+const groupDefaultPlaylist = (group?: ScreenGroup | null) =>
+  group?.assignments?.find((a) => a.isDefault)?.playlist ?? null;
 
 export const Screens: React.FC<ScreensProps> = ({
   screens,
@@ -50,1081 +56,499 @@ export const Screens: React.FC<ScreensProps> = ({
   onUpdateScreen,
   onQuickAssignScreen,
   onQuickAssignGroup,
-  onPreviewScreen,
-  onOpenPlaylistModal
+  onOpenPlaylistModal,
+  onCreateGroup,
+  onUpdateGroup,
+  onDeleteGroup
 }) => {
-  const [filter, setFilter] = useState<'all' | 'online' | 'offline' | 'unpaired'>('all');
-  const [viewMode, setViewMode] = useState<'floors' | 'cards' | 'table'>('floors');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [editingScreen, setEditingScreen] = useState<Screen | null>(null);
-  const [editName, setEditName] = useState('');
-  const [editGroupId, setEditGroupId] = useState<string>('');
-  const [savingEdit, setSavingEdit] = useState(false);
-  const [copiedScreenId, setCopiedScreenId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<StatusFilter>('all');
+  const [selectedScreenId, setSelectedScreenId] = useState<string | null>(null);
+  const [isAddingGroup, setIsAddingGroup] = useState(false);
 
-  const handleCopyTvLink = (screen: Screen) => {
-    if (!screen.deviceToken) return;
-    const url = `${window.location.origin}/player?token=${encodeURIComponent(screen.deviceToken)}`;
-    navigator.clipboard.writeText(url);
-    setCopiedScreenId(screen.id);
-    setTimeout(() => setCopiedScreenId(null), 2500);
-  };
+  const paired = screens.filter((s) => s.isPaired);
+  const pending = screens.filter((s) => !s.isPaired);
+  const online = paired.filter((s) => s.status === 'ONLINE');
+  const offline = paired.filter((s) => s.status === 'OFFLINE');
 
-  // Time formatting helper
-  const formatLastSeen = (isoStr?: string | null) => {
-    if (!isoStr) return 'Bilinmiyor';
-    const diff = Math.floor((Date.now() - new Date(isoStr).getTime()) / 1000);
-    if (diff < 60) return 'Az önce';
-    if (diff < 3600) return `${Math.floor(diff / 60)} dk önce`;
-    return new Date(isoStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  };
+  const visible = filter === 'online' ? online : filter === 'offline' ? offline : paired;
+  const ungrouped = visible.filter((s) => !s.groupId || !groups.some((g) => g.id === s.groupId));
+  // Floors with TVs first, empty floors (compact) at the bottom
+  const sortedGroups = [...groups].sort(
+    (a, b) => Number(!paired.some((s) => s.groupId === a.id)) - Number(!paired.some((s) => s.groupId === b.id))
+  );
+  // Detail modal reads the live object so status/preview stay current during polling
+  const selectedScreen = screens.find((s) => s.id === selectedScreenId) ?? null;
 
-  // Helper to find effective playlist for a screen
-  const getScreenPlaylistInfo = (screen: Screen) => {
-    const directDefault = screen.assignments?.find((a) => a.isDefault);
-    if (directDefault && directDefault.playlist) {
-      return {
-        playlistId: directDefault.playlistId || directDefault.playlist.id,
-        playlistName: directDefault.playlist.name,
-        isDirect: true,
-        sourceLabel: 'Bu Ekrana Özel'
-      };
-    }
-
-    // Check floor group assignment
-    const group = groups.find((g) => g.id === screen.groupId) || screen.group;
-    const groupDefault = group?.assignments?.find((a) => a.isDefault);
-    if (groupDefault && groupDefault.playlist) {
-      return {
-        playlistId: groupDefault.playlistId || groupDefault.playlist.id,
-        playlistName: groupDefault.playlist.name,
-        isDirect: false,
-        sourceLabel: `${group?.name || 'Kat'} Yayını`
-      };
-    }
-
-    return {
-      playlistId: null,
-      playlistName: 'Yayın Atanmamış',
-      isDirect: false,
-      sourceLabel: 'Yayın Yok'
-    };
-  };
-
-  // Filtered screens
-  const filtered = screens.filter((s) => {
-    // Status filter
-    if (filter === 'online' && (!s.isPaired || s.status !== 'ONLINE')) return false;
-    if (filter === 'offline' && (!s.isPaired || s.status !== 'OFFLINE')) return false;
-    if (filter === 'unpaired' && s.isPaired) return false;
-
-    // Search filter
-    if (searchTerm.trim()) {
-      const term = searchTerm.toLowerCase();
-      const matchName = s.name.toLowerCase().includes(term);
-      const matchGroup = s.group?.name?.toLowerCase().includes(term);
-      const matchCode = s.pairingCode?.toLowerCase().includes(term);
-      if (!matchName && !matchGroup && !matchCode) return false;
-    }
-
-    return true;
-  });
-
-  const unpairedScreens = screens.filter((s) => !s.isPaired);
-  const onlineCount = screens.filter((s) => s.isPaired && s.status === 'ONLINE').length;
-  const offlineCount = screens.filter((s) => s.isPaired && s.status === 'OFFLINE').length;
-
-  const handleOpenEdit = (screen: Screen) => {
-    setEditingScreen(screen);
-    setEditName(screen.name);
-    setEditGroupId(screen.groupId || '');
-  };
-
-  const handleSaveEdit = async () => {
-    if (!editingScreen) return;
-    try {
-      setSavingEdit(true);
-      await onUpdateScreen(editingScreen.id, {
-        name: editName.trim() || editingScreen.name,
-        groupId: editGroupId || null
-      });
-      setEditingScreen(null);
-    } finally {
-      setSavingEdit(false);
-    }
+  const rowProps = {
+    groups,
+    playlists,
+    onAssign: onQuickAssignScreen,
+    onOpenPlaylistModal,
+    onOpenDetail: (s: Screen) => setSelectedScreenId(s.id)
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header & Main Actions */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 bg-slate-900/60 p-5 rounded-2xl border border-slate-800">
+    <div className="space-y-5">
+      {/* Header: the single place for counts and page-level actions */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2.5">
-            <h2 className="text-xl font-bold text-white tracking-wide">TV Ekranları Yönetimi</h2>
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-sky-950 text-sky-400 border border-sky-800/60">
-              {screens.length} TV
-            </span>
-          </div>
-          <p className="text-xs text-slate-400 mt-1">
-            Kurumdaki TV ekranlarının canlı yayını, durumu ve tek tıkla playlist kontrolü
+          <h2 className="text-xl font-bold text-white">TV Ekranları</h2>
+          <p className="text-sm text-slate-400 mt-1">
+            <span className="text-emerald-400 font-semibold">{online.length}</span> / {paired.length} ekran çevrimiçi
           </p>
         </div>
-
-        {/* Quick Summary Badges & Actions */}
-        <div className="flex flex-wrap items-center gap-2.5">
-          <div className="flex items-center gap-1.5 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800 text-xs">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span className="text-slate-300 font-medium">Çevrimiçi:</span>
-            <span className="text-emerald-400 font-bold">{onlineCount}</span>
-            <span className="text-slate-600 mx-1">|</span>
-            <span className="w-2 h-2 rounded-full bg-red-400"></span>
-            <span className="text-slate-300 font-medium">Çevrimdışı:</span>
-            <span className="text-red-400 font-bold">{offlineCount}</span>
-          </div>
-
-          <button
-            onClick={onSyncAll}
-            title="Tüm TV Ekranlarına Anlık Yenileme Sinyali Gönder"
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
-          >
-            <RefreshCw className="w-3.5 h-3.5 text-sky-400" />
-            Tümünü Yenile
+        <div className="flex flex-wrap items-center gap-2">
+          {paired.length > 0 && (
+            <button onClick={onSyncAll} className="btn-secondary" title="Tüm TV'lere yayın yenileme sinyali gönder">
+              <RefreshCw className="w-4 h-4" />
+              Tümünü yenile
+            </button>
+          )}
+          <button onClick={() => setIsAddingGroup(true)} className="btn-secondary">
+            <Building2 className="w-4 h-4" />
+            Kat ekle
           </button>
-
-          <button
-            onClick={() => onOpenPairModal()}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-sky-600 hover:bg-sky-500 text-white shadow-md shadow-sky-600/30 transition"
-          >
+          <button onClick={() => onOpenPairModal()} className="btn-primary">
             <Plus className="w-4 h-4" />
-            Yeni TV Eşleştir
+            Yeni TV eşleştir
           </button>
         </div>
       </div>
 
-      {/* Smart Unpaired Notification Banner */}
-      {unpairedScreens.length > 0 && (
-        <div className="bg-gradient-to-r from-amber-950/40 via-amber-900/20 to-slate-900 border border-amber-600/40 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-amber-500/20 text-amber-400 rounded-xl border border-amber-500/30 shrink-0">
-              <Tv className="w-5 h-5 animate-bounce" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-amber-400 uppercase tracking-wider">
-                  Yeni TV Bağlantı Bekliyor ({unpairedScreens.length})
-                </span>
-                <span className="text-[10px] bg-amber-900/60 text-amber-300 px-2 py-0.5 rounded-full font-mono font-bold">
-                  KOD: {unpairedScreens[0].pairingCode}
-                </span>
+      {/* Pending pairing requests */}
+      {pending.length > 0 && (
+        <div className="rounded-2xl border border-amber-700/50 bg-amber-950/30 p-4 space-y-3">
+          <p className="text-sm font-semibold text-amber-300 flex items-center gap-2">
+            <Link2 className="w-4 h-4" />
+            Eşleşme bekleyen {pending.length} TV var
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {pending.map((s) => (
+              <div key={s.id} className="flex items-center gap-1 bg-slate-950/60 border border-amber-800/40 rounded-xl pl-3 pr-1 py-1">
+                <span className="font-mono font-bold tracking-widest text-amber-300 text-sm mr-2">{s.pairingCode}</span>
+                <button onClick={() => onOpenPairModal(s.pairingCode || '')} className="px-2.5 py-1 rounded-lg text-sm font-semibold bg-amber-500 hover:bg-amber-400 text-slate-950">
+                  Eşleştir
+                </button>
+                <button
+                  onClick={() => onDeleteScreen(s.id)}
+                  title="Bu bekleyen kaydı sil"
+                  aria-label={`${s.pairingCode} kodlu bekleyen kaydı sil`}
+                  className="btn-ghost min-w-0 min-h-0 p-1.5"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
-              <p className="text-xs text-slate-300 mt-0.5">
-                TV ekranında kod görüntülendi. Ekranı hemen adlandırıp bir kata bağlayabilirsiniz.
-              </p>
-            </div>
+            ))}
           </div>
-          <button
-            onClick={() => onOpenPairModal(unpairedScreens[0].pairingCode || '')}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition shadow-md whitespace-nowrap"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Hemen Eşleştir ve Adlandır
-          </button>
         </div>
       )}
 
-      {/* View Mode & Filter Control Bar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
-        {/* View Mode Selector */}
-        <div className="flex items-center bg-slate-900 p-1 rounded-xl border border-slate-800 text-xs">
-          <button
-            onClick={() => setViewMode('floors')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition ${
-              viewMode === 'floors'
-                ? 'bg-sky-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Building2 className="w-3.5 h-3.5" />
-            Kat Bazlı Görünüm
-          </button>
-          <button
-            onClick={() => setViewMode('cards')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition ${
-              viewMode === 'cards'
-                ? 'bg-sky-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <LayoutGrid className="w-3.5 h-3.5" />
-            TV Kartları
-          </button>
-          <button
-            onClick={() => setViewMode('table')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition ${
-              viewMode === 'table'
-                ? 'bg-sky-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <List className="w-3.5 h-3.5" />
-            Kompakt Tablo
-          </button>
-        </div>
-
-        {/* Search & Filter Tabs */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="TV veya Kat Ara..."
-              className="bg-slate-900 border border-slate-800 rounded-lg pl-8 pr-7 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 w-40 sm:w-52 transition"
-            />
-            {searchTerm && (
-              <button
-                onClick={() => setSearchTerm('')}
-                aria-label="Aramayı Temizle"
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-0.5 rounded"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            )}
-          </div>
-
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setFilter('all')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
-                filter === 'all'
-                  ? 'bg-slate-800 text-white border border-slate-700'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              Tümü ({screens.length})
-            </button>
-            <button
-              onClick={() => setFilter('online')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
-                filter === 'online'
-                  ? 'bg-emerald-950/60 text-emerald-400 border border-emerald-800'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              Çevrimiçi ({onlineCount})
-            </button>
-            <button
-              onClick={() => setFilter('offline')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
-                filter === 'offline'
-                  ? 'bg-red-950/60 text-red-400 border border-red-800'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              Çevrimdışı ({offlineCount})
-            </button>
-            {unpairedScreens.length > 0 && (
-              <button
-                onClick={() => setFilter('unpaired')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
-                  filter === 'unpaired'
-                    ? 'bg-amber-950/60 text-amber-400 border border-amber-800'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                Bekleyen ({unpairedScreens.length})
-              </button>
-            )}
+      {/* Offline warning */}
+      {offline.length > 0 && (
+        <div className="rounded-2xl border border-rose-800/60 bg-rose-950/30 p-4 flex items-start gap-3">
+          <WifiOff className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+          <div className="text-sm">
+            <p className="font-semibold text-rose-300">{offline.length} TV çevrimdışı</p>
+            <p className="text-slate-400 mt-0.5">
+              {offline.map((s) => s.name).join(', ')} — ekranın açık ve ağa bağlı olduğunu kontrol edin.
+            </p>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* Screen List Content */}
-      {filtered.length === 0 ? (
-        <div className="border border-dashed border-slate-800 rounded-2xl p-12 text-center bg-slate-900/40">
-          <Tv className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-          <h4 className="text-sm font-semibold text-slate-200">
-            {searchTerm ? 'Arama Kriterine Uygun TV Bulunamadı' : 'Ekran Bulunamadı'}
-          </h4>
-          <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-            {searchTerm
-              ? `"${searchTerm}" aramasına uygun TV ekranı veya kat bulunamadı.`
-              : 'Seçili filtreye uygun TV ekranı bulunamadı veya henüz TV eklenmedi.'}
-          </p>
-          <div className="mt-4 flex items-center justify-center gap-3">
-            {searchTerm && (
-              <button
-                onClick={() => setSearchTerm('')}
-                className="btn-secondary"
-              >
-                Aramayı Temizle
-              </button>
-            )}
-            <button
-              onClick={() => onOpenPairModal()}
-              className="btn-primary"
-            >
-              <Plus className="w-4 h-4" />
-              Yeni TV Eşleştir
-            </button>
-          </div>
-        </div>
+      {isAddingGroup && (
+        <AddGroupForm
+          onCancel={() => setIsAddingGroup(false)}
+          onSave={async (name) => {
+            await onCreateGroup({ name });
+            setIsAddingGroup(false);
+          }}
+        />
+      )}
+
+      {paired.length === 0 && groups.length === 0 ? (
+        <EmptyState
+          icon={Tv}
+          title="Henüz eşleştirilmiş TV yok"
+          description={
+            <>
+              TV tarayıcısında <span className="font-mono text-sky-400">/player</span> adresini açın, ekranda görünen 6 haneli kodu buraya girin.
+            </>
+          }
+        >
+          <button onClick={() => onOpenPairModal()} className="btn-primary">
+            <Plus className="w-4 h-4" />
+            İlk TV'yi eşleştir
+          </button>
+        </EmptyState>
       ) : (
         <>
-          {/* 1. FLOOR GROUPED VIEW (Recommended Default) */}
-          {viewMode === 'floors' && (
-            <div className="space-y-8">
-              {groups.map((group) => {
-                const groupScreens = filtered.filter((s) => s.groupId === group.id);
-                if (groupScreens.length === 0 && filter !== 'all') return null;
-
-                const groupDefault = group.assignments?.find((a) => a.isDefault);
-                const currentGroupPlaylistId = groupDefault?.playlistId || groupDefault?.playlist?.id || '';
-
-                return (
-                  <div key={group.id} className="space-y-3">
-                    {/* Floor Header Bar */}
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-slate-900 border border-slate-800/80 px-4 py-3 rounded-xl">
-                      <div className="flex items-center gap-2.5">
-                        <div className="p-1.5 bg-sky-500/10 text-sky-400 rounded-lg border border-sky-500/20">
-                          <Building2 className="w-4 h-4" />
-                        </div>
-                        <div>
-                          <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                            {group.name}
-                            <span className="text-[11px] font-normal text-slate-400">
-                              ({groupScreens.length} TV)
-                            </span>
-                          </h3>
-                          {group.description && (
-                            <p className="text-[11px] text-slate-400 line-clamp-1">{group.description}</p>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Floor-Wide Quick Playlist Dropdown */}
-                      <div className="flex items-center gap-2 w-full sm:w-auto">
-                        <span className="text-xs text-slate-400 whitespace-nowrap">
-                          Tüm Katın Yayını:
-                        </span>
-                        <select
-                          value={currentGroupPlaylistId}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            if (val === '__new__') {
-                              onOpenPlaylistModal?.();
-                            } else {
-                              onQuickAssignGroup(group.id, val || null);
-                            }
-                          }}
-                          className="bg-slate-950 border border-slate-700 hover:border-sky-500 rounded-lg px-2.5 py-1.5 text-xs text-sky-300 font-medium focus:outline-none focus:ring-1 focus:ring-sky-500 transition cursor-pointer"
-                        >
-                          <option value="">-- Kat Yayını Yok --</option>
-                          {playlists.map((pl) => (
-                            <option key={pl.id} value={pl.id}>
-                              📋 {pl.name} ({pl.items?.length || 0} Medya)
-                            </option>
-                          ))}
-                          <option value="__new__">➕ Yeni Playlist Oluştur...</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    {/* Floor Screen Cards */}
-                    {groupScreens.length === 0 ? (
-                      <p className="text-xs text-slate-500 italic pl-3">
-                        Bu kata henüz TV atanmadı.
-                      </p>
-                    ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {groupScreens.map((screen) => (
-                          <ScreenCard
-                            key={screen.id}
-                            screen={screen}
-                            playlists={playlists}
-                            playlistInfo={getScreenPlaylistInfo(screen)}
-                            onQuickAssignScreen={onQuickAssignScreen}
-                            onSyncScreen={onSyncScreen}
-                            onPreviewScreen={onPreviewScreen}
-                            onOpenEdit={handleOpenEdit}
-                            onOpenPlaylistModal={onOpenPlaylistModal}
-                            formatLastSeen={formatLastSeen}
-                            onCopyTvLink={handleCopyTvLink}
-                            isCopied={copiedScreenId === screen.id}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-
-              {/* Independent / Unassigned Screens */}
-              {filtered.some((s) => !s.groupId) && (
-                <div className="space-y-3 pt-4 border-t border-slate-800">
-                  <div className="flex items-center gap-2 px-1">
-                    <Tv className="w-4 h-4 text-slate-400" />
-                    <h3 className="text-sm font-bold text-slate-300">
-                      Kat Atanmamış Bağımsız TV'ler (
-                      {filtered.filter((s) => !s.groupId).length})
-                    </h3>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {filtered
-                      .filter((s) => !s.groupId)
-                      .map((screen) => (
-                        <ScreenCard
-                          key={screen.id}
-                          screen={screen}
-                          playlists={playlists}
-                          playlistInfo={getScreenPlaylistInfo(screen)}
-                          onQuickAssignScreen={onQuickAssignScreen}
-                          onSyncScreen={onSyncScreen}
-                          onPreviewScreen={onPreviewScreen}
-                          onOpenEdit={handleOpenEdit}
-                          onOpenPlaylistModal={onOpenPlaylistModal}
-                          formatLastSeen={formatLastSeen}
-                          onCopyTvLink={handleCopyTvLink}
-                          isCopied={copiedScreenId === screen.id}
-                        />
-                      ))}
-                  </div>
-                </div>
-              )}
-            </div>
+          {paired.length > 0 && (
+            <FilterChips
+              value={filter}
+              onChange={setFilter}
+              options={[
+                { value: 'all', label: 'Tümü', count: paired.length },
+                { value: 'online', label: 'Çevrimiçi', count: online.length },
+                { value: 'offline', label: 'Çevrimdışı', count: offline.length }
+              ]}
+            />
           )}
 
-          {/* 2. VISUAL CARDS VIEW */}
-          {viewMode === 'cards' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filtered.map((screen) => (
-                <ScreenCard
-                  key={screen.id}
-                  screen={screen}
+          <div className="space-y-4">
+            {ungrouped.length > 0 && (
+              <section className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+                <header className="px-4 py-3 border-b border-slate-800 flex items-center gap-2">
+                  <Tv className="w-4 h-4 text-slate-400" />
+                  <h3 className="text-sm font-semibold text-slate-300">Kat atanmamış</h3>
+                  <span className="text-xs text-slate-500">{ungrouped.length} TV · detaydan bir kat seçin</span>
+                </header>
+                <ul className="divide-y divide-slate-800/70">
+                  {ungrouped.map((s) => (
+                    <ScreenRow key={s.id} screen={s} {...rowProps} />
+                  ))}
+                </ul>
+              </section>
+            )}
+
+            {sortedGroups.map((group) => {
+              const groupScreens = visible.filter((s) => s.groupId === group.id);
+              if (filter !== 'all' && groupScreens.length === 0) return null;
+              return (
+                <FloorSection
+                  key={group.id}
+                  group={group}
+                  screens={groupScreens}
+                  totalOnline={online.filter((s) => s.groupId === group.id).length}
+                  totalScreens={paired.filter((s) => s.groupId === group.id).length}
                   playlists={playlists}
-                  playlistInfo={getScreenPlaylistInfo(screen)}
-                  onQuickAssignScreen={onQuickAssignScreen}
-                  onSyncScreen={onSyncScreen}
-                  onPreviewScreen={onPreviewScreen}
-                  onOpenEdit={handleOpenEdit}
+                  onAssignGroup={onQuickAssignGroup}
                   onOpenPlaylistModal={onOpenPlaylistModal}
-                  formatLastSeen={formatLastSeen}
-                  onCopyTvLink={handleCopyTvLink}
-                  isCopied={copiedScreenId === screen.id}
+                  onRename={(name) => onUpdateGroup(group.id, { name })}
+                  onDelete={() => onDeleteGroup(group.id)}
+                  rowProps={rowProps}
                 />
-              ))}
-            </div>
-          )}
+              );
+            })}
 
-          {/* 3. COMPACT TABLE VIEW */}
-          {viewMode === 'table' && (
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="bg-slate-950/80 border-b border-slate-800 text-slate-400 font-semibold uppercase tracking-wider">
-                      <th className="py-3 px-4">TV Adı & Kat</th>
-                      <th className="py-3 px-4">Durum</th>
-                      <th className="py-3 px-4">Aktif Playlist (Hemen Ata)</th>
-                      <th className="py-3 px-4">Oynatılan Medya</th>
-                      <th className="py-3 px-4">Son Görülme</th>
-                      <th className="py-3 px-4 text-right">Aksiyonlar</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/60">
-                    {filtered.map((screen) => {
-                      const plInfo = getScreenPlaylistInfo(screen);
-                      return (
-                        <tr
-                          key={screen.id}
-                          className="hover:bg-slate-800/40 transition group"
-                        >
-                          {/* TV Name & Floor */}
-                          <td className="py-3 px-4">
-                            <div className="flex items-center gap-2.5">
-                              <div className="p-1.5 bg-slate-800 text-sky-400 rounded-lg border border-slate-700">
-                                <Tv className="w-4 h-4" />
-                              </div>
-                              <div>
-                                <span className="font-semibold text-white block">
-                                  {screen.name}
-                                </span>
-                                <span className="text-[11px] text-slate-400">
-                                  {screen.group?.name || 'Bağımsız TV'}
-                                </span>
-                              </div>
-                            </div>
-                          </td>
-
-                          {/* Status */}
-                          <td className="py-3 px-4">
-                            {screen.isPaired ? (
-                              <span
-                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                                  screen.status === 'ONLINE'
-                                    ? 'bg-emerald-950/60 text-emerald-400 border-emerald-800'
-                                    : 'bg-red-950/60 text-red-400 border-red-800'
-                                }`}
-                              >
-                                <span
-                                  className={`w-1.5 h-1.5 rounded-full ${
-                                    screen.status === 'ONLINE'
-                                      ? 'bg-emerald-400 animate-pulse'
-                                      : 'bg-red-400'
-                                  }`}
-                                ></span>
-                                {screen.status}
-                              </span>
-                            ) : (
-                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-950/60 text-amber-400 border border-amber-800">
-                                KOD: {screen.pairingCode}
-                              </span>
-                            )}
-                          </td>
-
-                          {/* Inline Playlist Dropdown */}
-                          <td className="py-3 px-4">
-                            {screen.isPaired ? (
-                              <div className="space-y-1">
-                                <select
-                                  value={plInfo.isDirect ? plInfo.playlistId || '' : ''}
-                                  onChange={(e) => {
-                                    const val = e.target.value;
-                                    if (val === '__new__') {
-                                      onOpenPlaylistModal?.();
-                                    } else {
-                                      onQuickAssignScreen(screen.id, val || null);
-                                    }
-                                  }}
-                                  className="w-full max-w-[220px] bg-slate-950 border border-slate-700 hover:border-sky-500 rounded px-2 py-1 text-xs text-sky-300 font-medium focus:outline-none transition cursor-pointer"
-                                >
-                                  {screen.groupId && (
-                                    <option value="">
-                                      🏢 Kat Yayını ({screen.group?.name || 'Kat'})
-                                    </option>
-                                  )}
-                                  {!screen.groupId && <option value="">-- Yayın Yok --</option>}
-                                  {playlists.map((pl) => (
-                                    <option key={pl.id} value={pl.id}>
-                                      📋 {pl.name}
-                                    </option>
-                                  ))}
-                                  <option value="__new__">➕ Yeni Liste...</option>
-                                </select>
-                                <span className="block text-[10px] text-slate-500 font-mono">
-                                  Kaynak: {plInfo.sourceLabel}
-                                </span>
-                              </div>
-                            ) : (
-                              <span className="text-slate-500 italic">Eşleşme bekleniyor</span>
-                            )}
-                          </td>
-
-                          {/* Current Media */}
-                          <td className="py-3 px-4">
-                            {screen.currentMedia ? (
-                              screen.status === 'ONLINE' ? (
-                                <span className="text-slate-200 font-medium flex items-center gap-1.5 truncate max-w-[150px]">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0 animate-pulse" />
-                                  <Film className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                                  {screen.currentMedia}
-                                </span>
-                              ) : (
-                                <span className="text-slate-400 text-xs flex items-center gap-1.5 truncate max-w-[150px]" title={`Son yayın: ${screen.currentMedia}`}>
-                                  <WifiOff className="w-3 h-3 text-slate-500 shrink-0" />
-                                  Son: {screen.currentMedia}
-                                </span>
-                              )
-                            ) : (
-                              <span className="text-slate-500">-</span>
-                            )}
-                          </td>
-
-                          {/* Last Seen */}
-                          <td className="py-3 px-4 text-slate-400 font-mono">
-                            {formatLastSeen(screen.lastSeen)}
-                          </td>
-
-                          {/* Actions */}
-                          <td className="py-3 px-4 text-right">
-                            <div className="flex items-center justify-end gap-1.5">
-                              {onPreviewScreen && screen.isPaired && (
-                                <button
-                                  onClick={() => onPreviewScreen(screen)}
-                                  title="Canlı Simülasyonu İzle"
-                                  className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg transition"
-                                >
-                                  <Eye className="w-3.5 h-3.5 text-emerald-400" />
-                                </button>
-                              )}
-                              <button
-                                onClick={() => onSyncScreen(screen.id)}
-                                title="Yayını Yenile"
-                                className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg transition"
-                              >
-                                <RefreshCw className="w-3.5 h-3.5 text-sky-400" />
-                              </button>
-                              <button
-                                onClick={() => handleOpenEdit(screen)}
-                                title="Ayarlar"
-                                className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg transition"
-                              >
-                                <Settings className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
+            {visible.length === 0 && filter !== 'all' && (
+              <EmptyState icon={Tv} title="Bu filtreye uyan TV yok">
+                <button onClick={() => setFilter('all')} className="btn-secondary">
+                  Tümünü göster
+                </button>
+              </EmptyState>
+            )}
+          </div>
         </>
       )}
 
-      {/* Screen Settings / Edit Modal */}
-      {editingScreen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
-            <div className="flex items-center justify-between p-4 border-b border-slate-800">
-              <div className="flex items-center gap-2">
-                <Settings className="w-4 h-4 text-sky-400" />
-                <h3 className="font-semibold text-white text-sm">
-                  TV Ekranı Ayarları: {editingScreen.name}
-                </h3>
-              </div>
-              <button
-                onClick={() => setEditingScreen(null)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="p-5 space-y-4">
-              {/* TV Name */}
-              <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">
-                  TV Ekran Adı
-                </label>
-                <input
-                  type="text"
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  placeholder="Örn: Danışma Giriş TV"
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:border-sky-500"
-                />
-              </div>
-
-              {/* Floor Group */}
-              <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">
-                  Bulunduğu Kat / Alan
-                </label>
-                <select
-                  value={editGroupId}
-                  onChange={(e) => setEditGroupId(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:border-sky-500"
-                >
-                  <option value="">(Kat Atanmamış - Bağımsız TV)</option>
-                  {groups.map((g) => (
-                    <option key={g.id} value={g.id}>
-                      {g.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Persistent TV Link Section */}
-              {editingScreen.isPaired && editingScreen.deviceToken && (
-                <div className="bg-sky-950/40 border border-sky-800/60 p-3 rounded-xl space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-sky-300 flex items-center gap-1.5">
-                      <ExternalLink className="w-3.5 h-3.5" />
-                      Kalıcı TV Oynatıcı Bağlantısı
-                    </span>
-                    <span className="text-[10px] bg-sky-900/80 text-sky-300 px-2 py-0.5 rounded-full font-mono font-bold">
-                      Sabit Cihaz
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-slate-300 leading-relaxed">
-                    Bu bağlantıyı TV tarayıcısına girdiğinizde sekme kapansa dahi daima bu TV olarak açılır, yeni TV üretmez.
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      readOnly
-                      value={`${window.location.origin}/player?token=${encodeURIComponent(editingScreen.deviceToken)}`}
-                      className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-xs font-mono text-slate-200 focus:outline-none select-all"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleCopyTvLink(editingScreen)}
-                      className="px-3 py-1.5 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1 shrink-0 transition"
-                    >
-                      {copiedScreenId === editingScreen.id ? (
-                        <>
-                          <Check className="w-3.5 h-3.5" />
-                          Kopyalandı
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-3.5 h-3.5" />
-                          Kopyala
-                        </>
-                      )}
-                    </button>
-                    <a
-                      href={`/player?token=${encodeURIComponent(editingScreen.deviceToken)}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition shrink-0"
-                      title="TV'yi Yeni Sekmede Aç"
-                    >
-                      <ExternalLink className="w-4 h-4 text-emerald-400" />
-                    </a>
-                  </div>
-                </div>
-              )}
-
-              {/* Device Tech Info */}
-              <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800/80 space-y-1.5 text-[11px] text-slate-400 font-mono">
-                <div className="flex justify-between">
-                  <span>IP Adresi:</span>
-                  <span className="text-slate-200">{editingScreen.ipAddress || 'Bilinmiyor'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Player Versiyonu:</span>
-                  <span className="text-slate-200">{editingScreen.playerVersion || 'v1.0.0'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Son Sinyal:</span>
-                  <span className="text-slate-200">{formatLastSeen(editingScreen.lastSeen)}</span>
-                </div>
-              </div>
-
-              {/* Danger Zone */}
-              <div className="pt-3 border-t border-slate-800 space-y-2">
-                <span className="text-[11px] font-semibold text-slate-400 block">
-                  Cihaz Yönetimi
-                </span>
-                <div className="flex items-center gap-2">
-                  {editingScreen.isPaired && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditingScreen(null);
-                        onUnpairScreen(editingScreen.id);
-                      }}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-medium bg-amber-950/40 hover:bg-amber-900/50 text-amber-400 border border-amber-800/60 transition"
-                    >
-                      <Unlink className="w-3.5 h-3.5" />
-                      Eşleştirmeyi Sıfırla
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditingScreen(null);
-                      onDeleteScreen(editingScreen.id);
-                    }}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-medium bg-red-950/40 hover:bg-red-900/50 text-red-400 border border-red-800/60 transition"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    Ekranı Sil
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-2 p-4 bg-slate-950/80 border-t border-slate-800">
-              <button
-                type="button"
-                onClick={() => setEditingScreen(null)}
-                className="px-3.5 py-1.5 text-xs font-medium text-slate-300 hover:text-white"
-              >
-                Vazgeç
-              </button>
-              <button
-                type="button"
-                disabled={savingEdit}
-                onClick={handleSaveEdit}
-                className="px-4 py-1.5 text-xs font-semibold bg-sky-600 hover:bg-sky-500 text-white rounded-lg transition"
-              >
-                {savingEdit ? 'Kaydediliyor...' : 'Kaydet'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ScreenDetailModal
+        screen={selectedScreen}
+        groups={groups}
+        onClose={() => setSelectedScreenId(null)}
+        onUpdate={onUpdateScreen}
+        onSync={onSyncScreen}
+        onUnpair={onUnpairScreen}
+        onDelete={onDeleteScreen}
+      />
     </div>
   );
 };
 
 // ==========================================
-// Sub-component: ScreenCard
+// Floor section: header with floor-wide playlist + compact TV rows
 // ==========================================
-interface ScreenCardProps {
-  screen: Screen;
+interface RowSharedProps {
+  groups: ScreenGroup[];
   playlists: Playlist[];
-  playlistInfo: {
-    playlistId: string | null;
-    playlistName: string;
-    isDirect: boolean;
-    sourceLabel: string;
-  };
-  onQuickAssignScreen: (screenId: string, playlistId: string | null) => Promise<void>;
-  onSyncScreen: (id: string) => void;
-  onPreviewScreen?: (screen: Screen) => void;
-  onOpenEdit: (screen: Screen) => void;
-  onOpenPlaylistModal?: () => void;
-  formatLastSeen: (isoStr?: string | null) => string;
-  onCopyTvLink?: (screen: Screen) => void;
-  isCopied?: boolean;
+  onAssign: (screenId: string, playlistId: string | null) => Promise<void>;
+  onOpenPlaylistModal: () => void;
+  onOpenDetail: (screen: Screen) => void;
 }
 
-const ScreenCard: React.FC<ScreenCardProps> = ({
-  screen,
+interface FloorSectionProps {
+  group: ScreenGroup;
+  screens: Screen[];
+  totalOnline: number;
+  totalScreens: number;
+  playlists: Playlist[];
+  onAssignGroup: (groupId: string, playlistId: string | null) => Promise<void>;
+  onOpenPlaylistModal: () => void;
+  onRename: (name: string) => Promise<void>;
+  onDelete: () => void;
+  rowProps: RowSharedProps;
+}
+
+const FloorSection: React.FC<FloorSectionProps> = ({
+  group,
+  screens,
+  totalOnline,
+  totalScreens,
   playlists,
-  playlistInfo,
-  onQuickAssignScreen,
-  onSyncScreen,
-  onPreviewScreen,
-  onOpenEdit,
+  onAssignGroup,
   onOpenPlaylistModal,
-  formatLastSeen,
-  onCopyTvLink,
-  isCopied
+  onRename,
+  onDelete,
+  rowProps
 }) => {
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [draftName, setDraftName] = useState(group.name);
+  const currentPlaylistId = group.assignments?.find((a) => a.isDefault)?.playlistId ?? '';
+
+  const saveRename = async () => {
+    const name = draftName.trim();
+    if (!name || name === group.name) {
+      setIsRenaming(false);
+      return;
+    }
+    await onRename(name);
+    setIsRenaming(false);
+  };
+
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col justify-between hover:border-slate-700 transition shadow-lg group">
-      <div>
-        {/* Header: Name, Floor Badge & Settings Button */}
-        <div className="flex items-start justify-between gap-2 mb-3">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 bg-slate-800 text-sky-400 rounded-xl border border-slate-700">
-              <Tv className="w-4 h-4" />
-            </div>
-            <div>
-              <h4 className="font-semibold text-white text-sm tracking-tight">{screen.name}</h4>
-              <span className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
-                <Building2 className="w-3 h-3 text-slate-500" />
-                {screen.group?.name || 'Bağımsız TV'}
-              </span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-1.5">
-            {screen.isPaired ? (
-              <span
-                className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
-                  screen.status === 'ONLINE'
-                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                    : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
-                }`}
-              >
-                {screen.status === 'ONLINE' ? (
-                  <>
-                    <Wifi className="w-3 h-3 text-emerald-400" />
-                    Çevrimiçi
-                  </>
-                ) : (
-                  <>
-                    <WifiOff className="w-3 h-3 text-rose-400" />
-                    Çevrimdışı
-                  </>
-                )}
-              </span>
-            ) : (
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-950/60 text-amber-400 border border-amber-800">
-                KOD: {screen.pairingCode}
-              </span>
-            )}
-
-            {screen.isPaired && screen.deviceToken && onCopyTvLink && (
-              <>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onCopyTvLink(screen);
-                  }}
-                  title="TV Kalıcı Oynatıcı Linkini Kopyala (Bu link ile daima bu TV açılır)"
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-sky-400 hover:bg-slate-800 transition"
-                >
-                  {isCopied ? (
-                    <Check className="w-3.5 h-3.5 text-emerald-400" />
-                  ) : (
-                    <Copy className="w-3.5 h-3.5" />
-                  )}
-                </button>
-                <a
-                  href={`/player?token=${encodeURIComponent(screen.deviceToken)}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                  title="Bu TV'yi Yeni Sekmede Başlat (Kalıcı Link)"
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-400 hover:bg-slate-800 transition"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </a>
-              </>
-            )}
-
-            <button
-              onClick={() => onOpenEdit(screen)}
-              title="Ekran Ayarları"
-              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
-            >
-              <Settings className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
-
-        {/* 16:9 Mini TV Frame Preview */}
-        <div
-          onClick={() => screen.isPaired && onPreviewScreen && onPreviewScreen(screen)}
-          className={`aspect-video rounded-xl bg-slate-950 border-2 border-slate-800 relative overflow-hidden flex flex-col items-center justify-center p-3 mb-3 cursor-pointer transition group-hover:border-slate-700`}
-        >
-          {screen.isPaired ? (
-            <>
-              {screen.status === 'ONLINE' ? (
-                screen.currentMedia ? (
-                  <div className="text-center z-10 space-y-1">
-                    <Film className="w-6 h-6 text-sky-400 mx-auto" />
-                    <p className="text-xs font-semibold text-white px-2 truncate max-w-[190px]">
-                      {screen.currentMedia}
-                    </p>
-                    <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-mono bg-emerald-950/80 px-2 py-0.5 rounded-full border border-emerald-800">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      Canlı Yayında
-                    </span>
-                  </div>
-                ) : (
-                  <div className="text-center z-10 text-slate-500 space-y-1">
-                    <Tv className="w-6 h-6 mx-auto text-sky-400/80" />
-                    <p className="text-[11px] text-slate-300 font-medium">Yayın Bekleniyor</p>
-                    <span className="inline-block text-[10px] text-slate-500 font-mono">
-                      (TV Açık)
-                    </span>
-                  </div>
-                )
-              ) : (
-                <div className="text-center z-10 space-y-1">
-                  <WifiOff className="w-6 h-6 text-slate-500 mx-auto" />
-                  <p className="text-xs font-semibold text-slate-400 px-2 truncate max-w-[190px]">
-                    {screen.currentMedia ? `Son: ${screen.currentMedia}` : 'TV Çevrimdışı'}
-                  </p>
-                  <span className="inline-flex items-center gap-1 text-[10px] text-rose-400 font-mono bg-rose-950/60 px-2 py-0.5 rounded-full border border-rose-800/60">
-                    <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
-                    Sinyal Yok (Çevrimdışı)
-                  </span>
-                </div>
-              )}
-
-              {/* Hover Overlay */}
-              {screen.status === 'ONLINE' ? (
-                <div className="absolute inset-0 bg-sky-950/80 backdrop-blur-xs opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-1.5 text-xs font-semibold text-sky-200">
-                  <Eye className="w-4 h-4" />
-                  Canlı Önizle
-                </div>
-              ) : (
-                <div className="absolute inset-0 bg-slate-950/85 backdrop-blur-xs opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-1.5 text-xs font-medium text-slate-400">
-                  <WifiOff className="w-4 h-4 text-rose-400" />
-                  TV Çevrimdışı (Önizlenemez)
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="text-center text-amber-400 space-y-1">
-              <Tv className="w-6 h-6 mx-auto opacity-80" />
-              <p className="text-[11px] font-bold">Eşleştirme Bekliyor</p>
-              <p className="text-sm font-mono font-bold tracking-widest">{screen.pairingCode}</p>
-            </div>
-          )}
-        </div>
-
-        {/* Active Broadcast Inline Dropdown */}
-        <div className="space-y-1.5 pt-2 border-t border-slate-800/80">
-          <div className="flex items-center justify-between text-[11px]">
-            <span className="text-slate-400 font-medium">Yayınlanan Playlist:</span>
-            <span
-              className={`text-[10px] font-medium px-1.5 py-0.2 rounded ${
-                playlistInfo.isDirect
-                  ? 'bg-sky-950 text-sky-400 border border-sky-800/60'
-                  : 'bg-slate-800 text-slate-400'
-              }`}
-            >
-              {playlistInfo.sourceLabel}
-            </span>
-          </div>
-
-          {screen.isPaired ? (
-            <select
-              value={playlistInfo.isDirect ? playlistInfo.playlistId || '' : ''}
-              onChange={(e) => {
-                const val = e.target.value;
-                if (val === '__new__') {
-                  onOpenPlaylistModal?.();
-                } else {
-                  onQuickAssignScreen(screen.id, val || null);
-                }
+    <section className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+      <header
+        className={`px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+          screens.length > 0 ? 'border-b border-slate-800' : ''
+        }`}
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <Building2 className="w-4 h-4 text-sky-400 shrink-0" />
+          {isRenaming ? (
+            <form
+              className="flex items-center gap-1"
+              onSubmit={(e) => {
+                e.preventDefault();
+                saveRename();
               }}
-              className="w-full bg-slate-950 border border-slate-700 hover:border-sky-500 rounded-lg px-2.5 py-1.5 text-xs text-sky-300 font-medium focus:outline-none focus:ring-1 focus:ring-sky-500 transition cursor-pointer"
             >
-              {screen.groupId && (
-                <option value="">
-                  🏢 Kat Yayınına Uy ({screen.group?.name || 'Kat'})
-                </option>
-              )}
-              {!screen.groupId && <option value="">-- Yayın Atanmamış --</option>}
-              {playlists.map((pl) => (
-                <option key={pl.id} value={pl.id}>
-                  📋 {pl.name} ({pl.items?.length || 0} Medya)
-                </option>
-              ))}
-              <option value="__new__">➕ Yeni Playlist Oluştur...</option>
-            </select>
+              <input
+                autoFocus
+                value={draftName}
+                onChange={(e) => setDraftName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Escape' && setIsRenaming(false)}
+                aria-label="Kat adı"
+                className="input-standard py-1 px-2 w-56"
+              />
+              <button type="submit" aria-label="Kaydet" className="btn-ghost">
+                <Check className="w-4 h-4 text-emerald-400" />
+              </button>
+              <button type="button" onClick={() => setIsRenaming(false)} aria-label="Vazgeç" className="btn-ghost">
+                <X className="w-4 h-4" />
+              </button>
+            </form>
           ) : (
-            <div className="text-xs text-amber-400 italic bg-amber-950/20 p-1.5 rounded text-center">
-              Eşleştirme tamamlanınca yayın atanabilir
-            </div>
+            <>
+              <h3 className="text-sm font-semibold text-white truncate">{group.name}</h3>
+              <span className="text-xs text-slate-400 whitespace-nowrap">
+                {totalScreens === 0 ? 'TV yok' : `${totalOnline}/${totalScreens} çevrimiçi`}
+              </span>
+              <button
+                onClick={() => {
+                  setDraftName(group.name);
+                  setIsRenaming(true);
+                }}
+                title="Katı yeniden adlandır"
+                aria-label={`${group.name} katını yeniden adlandır`}
+                className="btn-ghost min-w-0 min-h-0 p-1.5"
+              >
+                <Edit2 className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={onDelete}
+                title="Katı sil"
+                aria-label={`${group.name} katını sil`}
+                className="btn-ghost min-w-0 min-h-0 p-1.5 hover:text-rose-400"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </>
           )}
         </div>
-      </div>
 
-      {/* Footer: Live Preview, Refresh, Last Seen */}
-      <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
-          {onPreviewScreen && screen.isPaired && (
-            <button
-              onClick={() => onPreviewScreen(screen)}
-              title="Canlı TV Simülasyonunu Aç"
-              className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-800 text-slate-200 hover:text-white hover:bg-slate-700 transition"
-            >
-              <Eye className="w-3.5 h-3.5 text-emerald-400" />
-              Canlı İzle
-            </button>
-          )}
+        <label className="flex items-center gap-2 text-sm text-slate-400">
+          <span className="whitespace-nowrap">Kat yayını</span>
+          <PlaylistSelect
+            value={currentPlaylistId}
+            playlists={playlists}
+            emptyLabel="Yayın yok"
+            onChange={(id) => onAssignGroup(group.id, id)}
+            onCreateNew={onOpenPlaylistModal}
+          />
+        </label>
+      </header>
 
-          <button
-            onClick={() => onSyncScreen(screen.id)}
-            title="TV Yayınını Hemen Güncelle (WebSocket)"
-            className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition"
-          >
-            <RefreshCw className="w-3 h-3 text-sky-400" />
-            Yenile
-          </button>
-        </div>
+      {screens.length > 0 && (
+        <ul className="divide-y divide-slate-800/70">
+          {screens.map((s) => (
+            <ScreenRow key={s.id} screen={s} {...rowProps} />
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+};
 
-        <span className="text-[11px] text-slate-400 font-mono flex items-center gap-1">
-          <Clock className="w-3 h-3 text-slate-500" />
-          {formatLastSeen(screen.lastSeen)}
+// ==========================================
+// One TV = one row: status · name · now playing · playlist · detail
+// ==========================================
+const ScreenRow: React.FC<RowSharedProps & { screen: Screen }> = ({
+  screen,
+  groups,
+  playlists,
+  onAssign,
+  onOpenPlaylistModal,
+  onOpenDetail
+}) => {
+  const isOnline = screen.status === 'ONLINE';
+  const directDefault = screen.assignments?.find((a) => a.isDefault);
+  const group = groups.find((g) => g.id === screen.groupId);
+  const floorPlaylist = groupDefaultPlaylist(group);
+
+  const sourceLabel = directDefault
+    ? 'Bu ekrana özel'
+    : floorPlaylist
+    ? 'Kat yayını'
+    : 'Yayın atanmamış';
+
+  return (
+    <li className="px-4 py-3 grid grid-cols-1 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1.2fr)_minmax(0,1.2fr)_auto] md:items-center gap-x-4 gap-y-2 hover:bg-slate-800/30 transition">
+      {/* Status + name */}
+      <button
+        type="button"
+        onClick={() => onOpenDetail(screen)}
+        className="flex items-center gap-2.5 min-w-0 text-left group"
+      >
+        <span
+          className={`w-2.5 h-2.5 rounded-full shrink-0 ${isOnline ? 'bg-emerald-400 shadow-sm shadow-emerald-400/50' : 'bg-rose-500'}`}
+          aria-hidden="true"
+        />
+        <span className="min-w-0">
+          <span className="block text-sm font-semibold text-white truncate group-hover:text-sky-300">{screen.name}</span>
+          <span className={`block text-xs ${isOnline ? 'text-emerald-400' : 'text-rose-400'}`}>
+            {isOnline ? 'Çevrimiçi' : `Çevrimdışı · ${formatLastSeen(screen.lastSeen)}`}
+          </span>
+        </span>
+      </button>
+
+      {/* Now playing */}
+      <div className="flex items-center gap-2 min-w-0 text-sm">
+        <Film className={`w-4 h-4 shrink-0 ${isOnline ? 'text-sky-400' : 'text-slate-600'}`} />
+        <span className={`truncate ${isOnline ? 'text-slate-200' : 'text-slate-500'}`} title={screen.currentMedia || undefined}>
+          {screen.currentMedia
+            ? isOnline
+              ? screen.currentMedia
+              : `Son: ${screen.currentMedia}`
+            : isOnline
+            ? 'Yayın bekleniyor'
+            : '—'}
         </span>
       </div>
-    </div>
+
+      {/* Playlist */}
+      <div className="min-w-0">
+        <PlaylistSelect
+          value={directDefault?.playlistId ?? ''}
+          playlists={playlists}
+          emptyLabel={screen.groupId ? `Kat yayınına uy${floorPlaylist ? ` (${floorPlaylist.name})` : ''}` : 'Yayın yok'}
+          onChange={(id) => onAssign(screen.id, id)}
+          onCreateNew={onOpenPlaylistModal}
+        />
+        <span className="block text-xs text-slate-500 mt-1">{sourceLabel}</span>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => onOpenDetail(screen)}
+        className="btn-ghost justify-self-end hidden md:inline-flex"
+        aria-label={`${screen.name} detayları`}
+        title="Önizleme ve ayarlar"
+      >
+        <ChevronRight className="w-4 h-4" />
+      </button>
+    </li>
+  );
+};
+
+// ==========================================
+// Playlist dropdown with "create new" shortcut
+// ==========================================
+const PlaylistSelect: React.FC<{
+  value: string;
+  playlists: Playlist[];
+  emptyLabel: string;
+  onChange: (playlistId: string | null) => void;
+  onCreateNew: () => void;
+}> = ({ value, playlists, emptyLabel, onChange, onCreateNew }) => (
+  <select
+    value={value}
+    onChange={(e) => {
+      const val = e.target.value;
+      if (val === NEW_PLAYLIST) onCreateNew();
+      else onChange(val || null);
+    }}
+    className="w-full sm:w-auto sm:min-w-[200px] max-w-full bg-slate-950 border border-slate-700 hover:border-sky-500 rounded-lg px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-sky-500 transition cursor-pointer"
+  >
+    <option value="">{emptyLabel}</option>
+    {playlists.map((pl) => (
+      <option key={pl.id} value={pl.id}>
+        {pl.name}
+      </option>
+    ))}
+    <option value={NEW_PLAYLIST}>+ Yeni playlist oluştur…</option>
+  </select>
+);
+
+// ==========================================
+// Inline "add floor" form
+// ==========================================
+const AddGroupForm: React.FC<{ onSave: (name: string) => Promise<void>; onCancel: () => void }> = ({ onSave, onCancel }) => {
+  const [name, setName] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) {
+      setError('Kat adı boş olamaz.');
+      return;
+    }
+    try {
+      setSaving(true);
+      setError(null);
+      await onSave(name.trim());
+    } catch (err: any) {
+      setError(err.message || 'Kat oluşturulamadı.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="bg-slate-900 border border-sky-600/40 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-start gap-3">
+      <div className="flex-1">
+        <input
+          autoFocus
+          value={name}
+          onChange={(e) => {
+            setName(e.target.value);
+            if (error) setError(null);
+          }}
+          onKeyDown={(e) => e.key === 'Escape' && onCancel()}
+          placeholder="Yeni kat adı, ör: 2. Kat – Yemekhane"
+          aria-label="Yeni kat adı"
+          className="input-standard"
+        />
+        {error && <p className="text-xs text-rose-400 mt-1.5">{error}</p>}
+      </div>
+      <div className="flex gap-2">
+        <button type="button" onClick={onCancel} className="btn-secondary">
+          Vazgeç
+        </button>
+        <button type="submit" disabled={saving} className="btn-primary">
+          {saving ? 'Kaydediliyor...' : 'Katı ekle'}
+        </button>
+      </div>
+    </form>
   );
 };

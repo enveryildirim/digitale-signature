@@ -103,22 +103,24 @@ tv-brodcast/
 │
 ├── client/                   # Admin Yönetim Paneli (SPA)
 │   ├── src/
-│   │   ├── App.tsx           # Ana state yönetimi, sekmeler ve modallar
+│   │   ├── App.tsx           # Ana state yönetimi, URL hash tabanlı sekmeler (#screens, #media, #playlists, #schedules) ve modallar
 │   │   ├── api.ts            # Tip güvenli backend API istemcisi
 │   │   ├── types.ts          # TypeScript veri modelleri
+│   │   ├── utils/format.ts   # formatLastSeen, formatDuration ortak biçimlendiricileri
 │   │   ├── components/
-│   │   │   ├── Navbar.tsx           # Üst menü, canlı TV sayaçları, hızlı yenile
+│   │   │   ├── ui/                  # Ortak UI katmanı: Modal (+ModalIcon), EmptyState, SearchInput ('/' kısayollu), FilterChips
+│   │   │   ├── Navbar.tsx           # 4 sekme (Ekranlar/Medya/Playlistler/Zamanlama), çevrimiçi rozeti, acil durum
+│   │   │   ├── ScreenDetailModal.tsx # Tek TV detayı: canlı önizleme, ad/kat, kalıcı link, cihaz bilgisi, yenile/sıfırla/sil
+│   │   │   ├── ConfirmModal.tsx     # Yıkıcı işlem onayı (ortak Modal üzerinde)
 │   │   │   ├── PairScreenModal.tsx  # 6 haneli kod ile TV eşleştirme modalı
 │   │   │   ├── MediaUploadModal.tsx # Dosya yükleme & Web URL ekleme modalı
 │   │   │   ├── MediaEditModal.tsx   # Medya başlık, süre, URL ve dosya güncelleme modalı
 │   │   │   ├── MediaThumbnail.tsx   # Görsel, video (ilk kare) ve web sayfası thumbnail bileşeni
-│   │   │   ├── PlaylistModal.tsx    # Sürükle-bırak/sıralı playlist modalı
+│   │   │   ├── PlaylistModal.tsx    # Sıralı playlist düzenleme modalı
 │   │   │   └── ScheduleModal.tsx    # Kat/ekran zamanlama ve gün/saat kural modalı
 │   │   └── pages/
 │   │       ├── Login.tsx            # Giriş ekranı (admin / admin123)
-│   │       ├── Dashboard.tsx        # 3-tık hızlı işlem çubuğu, sayaçlar, kat haritası
-│   │       ├── Screens.tsx          # TV listesi, durum hapları, eşleştirme, unpair
-│   │       ├── Groups.tsx           # Kat grupları yönetimi
+│   │       ├── Screens.tsx          # Ana sayfa: uyarı bantları, kat bölümleri (kat CRUD + kat yayını), TV satırları
 │   │       ├── Media.tsx            # Medya galerisi, video/resim/URL kartları
 │   │       ├── Playlists.tsx        # Oynatma listesi kartları ve içerik önizleme
 │   │       └── Schedules.tsx        # Aktif yayın plan matrisi
@@ -203,6 +205,26 @@ Sistem üzerinde 3 katmanlı otomatik doğrulama testi koşturulmuştur:
   - **Yapılan İş:** Kullanılabilirlik (Hick, Fitts, Jakob yasaları), WCAG 2.1 AA erişilebilirlik standartları, modern UI/UX prensipleri ve mikro-kopya (UX Writing) kuralları doğrultusunda kurum içi Dijital Bilgi Ekranı projesi için kapsamlı, aksiyon odaklı `todo_ux.md` yol haritası ve görev takip listesi oluşturuldu. 7 ana kategori, 5 adımlı tasarım doğrulama matrisi ve aşamalı fazlandırma planı sisteme işlendi.
   - **Değiştirilen Dosyalar:** `todo_ux.md`, `PROJECT_MEMORY.md`
   - **Doğrulama:** `npm run test:scheduler` (5/5 Başarılı), `npm run build` (0 hata, Server + Client tam derleme).
+
+- **[2026-10-22] - [Antigravity Agent]:**
+  - **Yapılan İş:**
+    - Kurumsal kimliğe uygun, yüksek çözünürlüklü ve vektörel SVG Favicon tasarımı (`favicon.svg`) oluşturuldu. Sky-600 degrade arka plan, TV ekranı çerçevesi, yayın anteni, oynatma üçgeni ve canlı durum bildirim noktası içeren simge hazırlandı.
+    - **Yönetici Paneli Entegrasyonu:** `client/public/favicon.svg` eklendi, `client/index.html` içindeki varsayılan Vite logosu yerine `/favicon.svg` bağlandı.
+    - **TV Player Entegrasyonu:** `player/favicon.svg` eklendi, `player/index.html` içerisine `<link rel="icon" type="image/svg+xml" href="favicon.svg">` eklendi, `player/sw.js` Service Worker önbellekleme listesine (`STATIC_ASSETS`) eklenerek çevrimdışı çalışması güvenceye alındı.
+    - **Sunucu Kök Yönlendirmesi:** `server/src/index.ts` dosyasına doğrudan `/favicon.ico` veya `/favicon.svg` isteklerini karşılayan ve `image/svg+xml` MIME tipiyle servis eden Express rotası eklendi.
+  - **Değiştirilen/Eklenen Dosyalar:**
+    - `client/public/favicon.svg`
+    - `player/favicon.svg`
+    - `client/index.html`
+    - `player/index.html`
+    - `player/sw.js`
+    - `server/src/index.ts`
+    - `PROJECT_MEMORY.md`
+  - **Doğrulama:**
+    - `npm run test:scheduler`: 5/5 Başarılı
+    - `npm run test:api`: 6/6 Başarılı
+    - `npm run test:load`: 10/10 Başarılı
+    - `npm run build`: 0 hata (Vite public dosyasını `client/dist/favicon.svg` olarak başarıyla paketledi).
 
 - **2026-10-22 - Antigravity Agent:**
   - **Yapılan İş:**
@@ -382,3 +404,12 @@ Sistem üzerinde 3 katmanlı otomatik doğrulama testi koşturulmuştur:
     - `npm run test:load`: 10 TV Eşzamanlı Yük ve Anlık Sync (501ms) Başarılı
     - `npm run build`: Server TypeScript ve Client Vite bundle 0 hata ile derlendi.
 
+- **[2026-10-22] - [Claude Code]:**
+  - **Yapılan İş:** Yönetici paneli sadeleştirmesi, `todo_ui.md` Faz 1 + Faz 2 (+ Faz 5'in küçük maddeleri):
+    1. **Navigasyon 6 → 4 sekme:** Genel Bakış ve Katlar & Gruplar sayfaları Ekranlar'a birleştirildi. Aktif sekme URL hash'inde tutuluyor; sayfa yenileme ve tarayıcı geri tuşu çalışıyor. Breadcrumb, navbar'daki tekrar eden "Tüm TV'leri Yenile" ve "TV Player Aç" (yöneticinin tarayıcısında bekleyen TV kaydı açıyordu) kaldırıldı.
+    2. **Ekranlar sayfası (1130 → 554 satır):** 3 görünüm modu tek görünüme indi. Kat bölümleri (TV'si olanlar üstte, boş katlar tek satır) + kompakt TV satırı (durum · ad · şu an oynayan · playlist seçimi · detay). Kat ekleme/yeniden adlandırma/silme kat başlığında. Kat atanmamış TV'ler ayrı bölümde, en üstte. Eşleşme bekleyen kayıtlar için "Eşleştir / Yoksay" bandı, çevrimdışı TV bandı.
+    3. **ScreenDetailModal:** Eski ayar modalı + `ScreenPreviewModal` birleştirildi. Önizleme iframe'inin 10 sn'lik polling'de baştan yüklenmesi hatası `useMemo` ile giderildi.
+    4. **Ortak UI katmanı:** `Modal` bileşeni 8 modal kabuğundaki kopya kodun (backdrop, başlık, Esc dinleyici) yerini aldı. `EmptyState`, `SearchInput`, `FilterChips`, `utils/format.ts` eklendi. Buton tipografisi `text-sm` oldu, dropdown'lardaki emojiler kaldırıldı, medya tip rozetleri Türkçeleşti.
+    5. Grup açıklama alanı arayüzden kaldırıldı (DB kolonu ve API korunuyor).
+  - **Değiştirilen Dosyalar:** `client/src/App.tsx`, `client/src/index.css`, `client/src/components/Navbar.tsx`, `client/src/components/ConfirmModal.tsx`, `client/src/components/PairScreenModal.tsx`, `client/src/components/EmergencyModal.tsx`, `client/src/components/MediaUploadModal.tsx`, `client/src/components/MediaEditModal.tsx`, `client/src/components/PlaylistModal.tsx`, `client/src/components/ScheduleModal.tsx`, `client/src/components/skeletons/PageSkeleton.tsx`, `client/src/pages/Screens.tsx`, `client/src/pages/Media.tsx`, `client/src/pages/Playlists.tsx`, `client/src/pages/Schedules.tsx`. Yeni: `client/src/components/ui/*`, `client/src/components/ScreenDetailModal.tsx`, `client/src/utils/format.ts`, `todo_ui.md`. Silinen: `client/src/pages/Dashboard.tsx`, `client/src/pages/Groups.tsx`, `client/src/components/Breadcrumbs.tsx`, `client/src/components/ScreenPreviewModal.tsx`.
+  - **Doğrulama:** `npm run test:scheduler` (5/5), `npm run test:api` (tümü başarılı), `npm run test:load` (10 TV sync 502ms), `npm run build` (0 hata). Headless Chromium ile giriş → Ekranlar → TV detayı → Medya → Playlistler gezildi; hash routing, geri tuşu ve yenileme doğrulandı, konsol hatası yok, 390px mobil görünüm kontrol edildi.

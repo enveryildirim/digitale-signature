@@ -22,17 +22,17 @@
 @layer components {
   /* UX-1.4: Primary CTA Button */
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-xl bg-sky-600 hover:bg-sky-500 text-white shadow-md shadow-sky-600/25 transition active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none min-h-[40px];
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold rounded-xl bg-sky-600 hover:bg-sky-500 text-white shadow-md shadow-sky-600/25 transition active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none min-h-[40px];
   }
 
   /* UX-1.4: Secondary Button */
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-medium rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none min-h-[40px];
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none min-h-[40px];
   }
 
   /* UX-1.4: Destructive Action Button */
   .btn-destructive {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-medium rounded-xl bg-rose-950/40 hover:bg-rose-900/60 text-rose-400 hover:text-rose-200 border border-rose-800/60 transition active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none min-h-[40px];
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-xl bg-rose-950/40 hover:bg-rose-900/60 text-rose-400 hover:text-rose-200 border border-rose-800/60 transition active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none min-h-[40px];
   }
 
   /* UX-1.4: Ghost / Icon Button (Min 40x40px for Fitts Law touch targets) */

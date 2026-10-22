@@ -1,6 +1,7 @@
 import React from 'react';
 import { CalendarClock, Plus, Trash2, Clock, Calendar, CheckCircle2 } from 'lucide-react';
 import { Assignment } from '../types';
+import { EmptyState } from '../components/ui/EmptyState';
 
 interface SchedulesProps {
   assignments: Assignment[];
@@ -36,8 +37,8 @@ export const Schedules: React.FC<SchedulesProps> = ({
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold text-white tracking-wide">Yayın Planlama ve Zamanlama</h2>
-          <p className="text-xs text-slate-400 mt-1">
+          <h2 className="text-xl font-bold text-white">Zamanlama</h2>
+          <p className="text-sm text-slate-400 mt-1">
             Hangi ekranda veya katta ne zaman hangi oynatma listesinin yayınlanacağını belirleyin
           </p>
         </div>
@@ -46,32 +47,28 @@ export const Schedules: React.FC<SchedulesProps> = ({
           className="btn-primary"
         >
           <Plus className="w-4 h-4" />
-          Yeni Yayın Planı Oluştur
+          Yeni plan
         </button>
       </div>
 
       {assignments.length === 0 ? (
-        <div className="border border-dashed border-slate-800 rounded-2xl p-12 text-center bg-slate-900/40">
-          <CalendarClock className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-          <h4 className="text-sm font-semibold text-slate-200">Henüz Yayın Ataması Bulunmuyor</h4>
-          <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-            TV ekranlarına veya kat gruplarına oynatma listesi atayarak yayını hemen başlatabilirsiniz.
-          </p>
-          <button
-            onClick={onOpenScheduleModal}
-            className="mt-5 btn-primary"
-          >
+        <EmptyState
+          icon={CalendarClock}
+          title="Henüz yayın planı yok"
+          description="Belirli gün ve saatlerde farklı bir playlist oynatmak için plan oluşturun."
+        >
+          <button onClick={onOpenScheduleModal} className="btn-primary">
             <Plus className="w-4 h-4" />
-            İlk Yayın Planını Oluştur
+            İlk planı oluştur
           </button>
-        </div>
+        </EmptyState>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {assignments.map((assignment) => {
             const targetName = assignment.screen
-              ? `📺 ${assignment.screen.name}`
+              ? assignment.screen.name
               : assignment.group
-              ? `🏢 ${assignment.group.name} (Tüm TV'ler)`
+              ? `${assignment.group.name} (tüm kat)`
               : 'Genel';
 
             return (

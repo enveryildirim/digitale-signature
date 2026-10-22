@@ -1,11 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { api } from './api';
 import { User, Screen, ScreenGroup, Media as MediaType, Playlist, Assignment } from './types';
-import { Navbar } from './components/Navbar';
+import { Navbar, Tab, TAB_IDS } from './components/Navbar';
 import { Login } from './pages/Login';
-import { Dashboard } from './pages/Dashboard';
 import { Screens } from './pages/Screens';
-import { Groups } from './pages/Groups';
 import { Media } from './pages/Media';
 import { Playlists } from './pages/Playlists';
 import { Schedules } from './pages/Schedules';
@@ -15,11 +13,15 @@ import { MediaEditModal } from './components/MediaEditModal';
 import { PlaylistModal } from './components/PlaylistModal';
 import { ScheduleModal } from './components/ScheduleModal';
 import { EmergencyModal } from './components/EmergencyModal';
-import { ScreenPreviewModal } from './components/ScreenPreviewModal';
 import { ConfirmModal, ConfirmModalState } from './components/ConfirmModal';
 import { Toast, ToastData, ToastType } from './components/Toast';
-import { Breadcrumbs } from './components/Breadcrumbs';
 import { PageSkeleton } from './components/skeletons/PageSkeleton';
+
+// Active tab lives in the URL hash so refresh and the browser back button work
+const readTabFromHash = (): Tab => {
+  const hash = window.location.hash.slice(1) as Tab;
+  return TAB_IDS.includes(hash) ? hash : 'screens';
+};
 
 export const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(() => {
@@ -27,7 +29,7 @@ export const App: React.FC = () => {
     return saved ? JSON.parse(saved) : null;
   });
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('signage_auth_token'));
-  const [currentTab, setCurrentTab] = useState<string>('dashboard');
+  const [currentTab, setCurrentTabState] = useState<Tab>(readTabFromHash);
 
   // Data states
   const [screens, setScreens] = useState<Screen[]>([]);
@@ -48,7 +50,6 @@ export const App: React.FC = () => {
   const [editingPlaylist, setEditingPlaylist] = useState<Playlist | null>(null);
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
   const [isEmergencyModalOpen, setIsEmergencyModalOpen] = useState(false);
-  const [previewingScreen, setPreviewingScreen] = useState<Screen | null>(null);
 
   // Confirm Modal state
   const [confirmModalState, setConfirmModalState] = useState<ConfirmModalState | null>(null);
@@ -69,6 +70,16 @@ export const App: React.FC = () => {
       description,
       undoAction
     });
+  };
+
+  useEffect(() => {
+    const onHashChange = () => setCurrentTabState(readTabFromHash());
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
+
+  const setCurrentTab = (tab: Tab) => {
+    window.location.hash = tab;
   };
 
   const loadAllData = async () => {
@@ -211,32 +222,36 @@ export const App: React.FC = () => {
   };
 
   // Group Actions
-  const handleCreateGroup = async (data: { name: string; description?: string }) => {
+  const handleCreateGroup = async (data: { name: string }) => {
     await api.createGroup(data);
-    showToast(`"${data.name}" kat grubu oluşturuldu.`, 'success');
+    showToast(`"${data.name}" katı eklendi.`, 'success');
     loadAllData();
   };
 
-  const handleUpdateGroup = async (id: string, data: { name?: string; description?: string }) => {
-    await api.updateGroup(id, data);
-    showToast('Kat grubu başarıyla güncellendi.', 'success');
-    loadAllData();
+  const handleUpdateGroup = async (id: string, data: { name: string }) => {
+    try {
+      await api.updateGroup(id, data);
+      showToast('Kat adı güncellendi.', 'success');
+      loadAllData();
+    } catch (err: any) {
+      showToast(err.message || 'Kat güncellenemedi.', 'error');
+    }
   };
 
   const handleDeleteGroup = async (id: string) => {
     const target = groups.find((g) => g.id === id);
     setConfirmModalState({
       isOpen: true,
-      title: 'Kat Grubunu Sil',
-      message: `"${target?.name || 'Bu kat grubu'}" silindiğinde, bu gruptaki TV'lerin grup bağı kaldırılacak ve gruba atanmış varsayılan yayınlar sonlanacaktır.`,
-      confirmLabel: 'Grubu Sil',
+      title: 'Katı Sil',
+      message: `"${target?.name || 'Bu kat'}" silindiğinde bu kattaki TV'ler "Kat atanmamış" bölümüne taşınır ve kata atanmış yayınlar sonlanır.`,
+      confirmLabel: 'Katı Sil',
       cancelLabel: 'Vazgeç',
       isDestructive: true,
       onConfirm: async () => {
         try {
           setConfirmLoading(true);
           await api.deleteGroup(id);
-          showToast('Kat grubu silindi.', 'success');
+          showToast('Kat silindi.', 'success');
           loadAllData();
         } finally {
           setConfirmLoading(false);
@@ -379,6 +394,10 @@ export const App: React.FC = () => {
 
   const onlineScreensCount = screens.filter((s) => s.isPaired && s.status === 'ONLINE').length;
   const totalPairedScreens = screens.filter((s) => s.isPaired).length;
+  const openNewPlaylistModal = () => {
+    setEditingPlaylist(null);
+    setIsPlaylistModalOpen(true);
+  };
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
@@ -387,7 +406,6 @@ export const App: React.FC = () => {
         setCurrentTab={setCurrentTab}
         user={user}
         onLogout={handleLogout}
-        onSyncAll={handleSyncAll}
         onlineCount={onlineScreensCount}
         totalScreens={totalPairedScreens}
         isEmergencyActive={isEmergencyActive}
@@ -395,31 +413,10 @@ export const App: React.FC = () => {
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Breadcrumb Navigation (UX-2.2) */}
-        <Breadcrumbs
-          currentTab={currentTab}
-          onSelectTab={setCurrentTab}
-          subtitle={currentTab === 'screens' ? `${onlineScreensCount}/${totalPairedScreens} TV Aktif` : undefined}
-        />
-
         {loading ? (
           <PageSkeleton tab={currentTab} />
         ) : (
           <>
-            {currentTab === 'dashboard' && (
-              <Dashboard
-                screens={screens}
-                groups={groups}
-                playlists={playlists}
-                media={media}
-                onOpenPairModal={() => setIsPairModalOpen(true)}
-                onOpenUploadModal={() => setIsUploadModalOpen(true)}
-                onOpenPlaylistModal={() => { setEditingPlaylist(null); setIsPlaylistModalOpen(true); }}
-                onOpenScheduleModal={() => setIsScheduleModalOpen(true)}
-                onSyncScreen={handleSyncScreen}
-              />
-            )}
-
             {currentTab === 'screens' && (
               <Screens
                 screens={screens}
@@ -436,17 +433,7 @@ export const App: React.FC = () => {
                 onUpdateScreen={handleUpdateScreen}
                 onQuickAssignScreen={handleQuickAssignScreen}
                 onQuickAssignGroup={handleQuickAssignGroup}
-                onPreviewScreen={(s) => setPreviewingScreen(s)}
-                onOpenPlaylistModal={() => {
-                  setEditingPlaylist(null);
-                  setIsPlaylistModalOpen(true);
-                }}
-              />
-            )}
-
-            {currentTab === 'groups' && (
-              <Groups
-                groups={groups}
+                onOpenPlaylistModal={openNewPlaylistModal}
                 onCreateGroup={handleCreateGroup}
                 onUpdateGroup={handleUpdateGroup}
                 onDeleteGroup={handleDeleteGroup}
@@ -468,7 +455,7 @@ export const App: React.FC = () => {
             {currentTab === 'playlists' && (
               <Playlists
                 playlists={playlists}
-                onOpenCreateModal={() => { setEditingPlaylist(null); setIsPlaylistModalOpen(true); }}
+                onOpenCreateModal={openNewPlaylistModal}
                 onOpenEditModal={(pl) => { setEditingPlaylist(pl); setIsPlaylistModalOpen(true); }}
                 onDeletePlaylist={handleDeletePlaylist}
               />
@@ -548,12 +535,6 @@ export const App: React.FC = () => {
         isActive={isEmergencyActive}
         onActivate={handleActivateEmergency}
         onDeactivate={handleDeactivateEmergency}
-      />
-
-      <ScreenPreviewModal
-        isOpen={previewingScreen !== null}
-        onClose={() => setPreviewingScreen(null)}
-        screen={previewingScreen}
       />
     </div>
   );
