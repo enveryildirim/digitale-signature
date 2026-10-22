@@ -140,16 +140,36 @@ export class WsServer {
             }
           });
 
-          ws.on('close', () => {
+          ws.on('close', async () => {
             this.pairedSockets.delete(screenId);
+            this.livePlaybackStates.delete(screenId);
+
+            // Update database to OFFLINE immediately upon disconnect (updateMany is safe against race condition deletions)
+            try {
+              await prisma.screen.updateMany({
+                where: { id: screenId },
+                data: { status: 'OFFLINE' }
+              });
+            } catch {
+              // Ignore
+            }
           });
 
         } else if (screenIdParam) {
           // Unpaired screen waiting for pairing code
           this.pairingSockets.set(screenIdParam, ws);
 
-          ws.on('close', () => {
+          ws.on('close', async () => {
             this.pairingSockets.delete(screenIdParam);
+
+            // If an unpaired screen was opened and closed without pairing, clean it up safely
+            try {
+              await prisma.screen.deleteMany({
+                where: { id: screenIdParam, isPaired: false }
+              });
+            } catch {
+              // Ignore
+            }
           });
         }
       } catch (err) {

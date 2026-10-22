@@ -557,6 +557,29 @@
     }
   }
 
+  // Notify server instantly when tab is closed or navigated away (Instant Offline)
+  function notifyOffline() {
+    if (!deviceToken || isPreview) return;
+    try {
+      const payload = JSON.stringify({ token: deviceToken });
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon('/api/player/offline', new Blob([payload], { type: 'application/json' }));
+      } else {
+        fetch('/api/player/offline', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: payload,
+          keepalive: true
+        });
+      }
+    } catch {
+      // Ignore errors on unload
+    }
+  }
+
+  window.addEventListener('beforeunload', notifyOffline);
+  window.addEventListener('pagehide', notifyOffline);
+
   // --- Initialization ---
   function init() {
     registerServiceWorker();
@@ -565,6 +588,16 @@
 
     updateClock();
     setInterval(updateClock, 1000);
+
+    // If persistent token passed in URL, prioritize and store it
+    if (paramToken) {
+      deviceToken = paramToken;
+      try {
+        localStorage.setItem('signage_device_token', paramToken);
+      } catch (e) {
+        console.warn('LocalStorage save error:', e);
+      }
+    }
 
     if (!deviceToken) {
       startPairingFlow();

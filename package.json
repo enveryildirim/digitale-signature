@@ -11,6 +11,7 @@
     "build:client": "npm --prefix client run build",
     "build": "npm run build:server && npm run build:client",
     "start": "npm --prefix server start",
+    "reset": "npm --prefix server run reset",
     "test:scheduler": "npm --prefix server run test:scheduler",
     "test:api": "npm --prefix server run test:api",
     "test:load": "npm --prefix server run test:load"

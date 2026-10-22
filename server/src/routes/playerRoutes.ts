@@ -110,4 +110,31 @@ router.post('/heartbeat', async (req, res) => {
   }
 });
 
+// POST /api/player/offline - Instant offline signal sent via sendBeacon on tab close
+router.post('/offline', async (req, res) => {
+  try {
+    let token = req.body?.token;
+    if (!token && typeof req.body === 'string') {
+      try {
+        const parsed = JSON.parse(req.body);
+        token = parsed.token;
+      } catch {}
+    }
+    if (!token && req.query.token) {
+      token = req.query.token as string;
+    }
+
+    if (token) {
+      await prisma.screen.updateMany({
+        where: { deviceToken: token },
+        data: { status: 'OFFLINE' }
+      });
+    }
+
+    res.json({ status: 'ok' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;

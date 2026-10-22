@@ -204,6 +204,69 @@ Sistem üzerinde 3 katmanlı otomatik doğrulama testi koşturulmuştur:
   - **Değiştirilen Dosyalar:** `todo_ux.md`, `PROJECT_MEMORY.md`
   - **Doğrulama:** `npm run test:scheduler` (5/5 Başarılı), `npm run build` (0 hata, Server + Client tam derleme).
 
+- **2026-10-22 - Antigravity Agent:**
+  - **Yapılan İş:**
+    - **Anında Çevrimdışı (Instant OFFLINE) Tespiti:**
+      - TV sekmesi kapatıldığında 90 saniyelik zaman aşımını beklemeksizin `ws.on('close')` anında ekranın veritabanı durumu `status = 'OFFLINE'` olarak güncellendi (`wsServer.ts`).
+      - TV Player istemcisine `beforeunload` ve `pagehide` olaylarında `navigator.sendBeacon('/api/player/offline')` sinyali eklendi (`player.js`, `playerRoutes.ts`).
+      - Eşleşmemiş boş ekran sekmeleri kapatıldığında otomatik silinerek veritabanında çöp TV bırakılması engellendi.
+    - **Kalıcı TV Oynatıcı Kimliği (Persistent TV Identity):**
+      - TV Player'a kalıcı URL parametresi (`/player?token=...`) önceliği getirildi; sekme kapansa veya çerezler silinse dahi sabit cihaz olarak yayına devam etmesi sağlandı.
+      - Admin paneli ekran kartlarına ve ayarlar modalına **"TV Bağlantısını Kopyala"** (`Copy`) ve **"Bu TV'yi Yeni Sekmede Aç"** (`ExternalLink`) butonları eklendi (`Screens.tsx`).
+  - **Değiştirilen Dosyalar:**
+    - `server/src/ws/wsServer.ts`
+    - `server/src/routes/playerRoutes.ts`
+    - `player/player.js`
+    - `client/src/pages/Screens.tsx`
+    - `PROJECT_MEMORY.md`
+  - **Doğrulama:**
+    - `npm run test:scheduler`: 5/5 Başarılı
+    - `npm run test:api`: 6/6 Başarılı
+    - `npm run test:load`: 10/10 Başarılı
+    - `npm run build`: 0 hata (Server TypeScript + Client Vite tam derleme)
+
+- **2026-10-22 - Antigravity Agent:**
+  - **Yapılan İş:**
+    - Sistemin ilk başlangıçta tertemiz (fresh start / sıfırdan) başlaması için `server/src/seed.ts` güncellendi; sahte medya ve örnek oynatma listesi ekleme adımları kaldırıldı.
+    - `resetAllData()` fonksiyonu ve `npm run reset` komutu tanımlandı. Tüm ekranlar, medyalar, oynatma listeleri, zamanlama kuralları ve `uploads/` dizinindeki eski dosyalar temizlenerek sistem sıfırlandı.
+    - Canlı veritabanı 0 ekran, 0 medya, 0 oynatma listesi, 5 temel kurumsal kat grubu ve `admin` hesabı ile temiz başlangıç durumuna getirildi.
+  - **Değiştirilen Dosyalar:**
+    - `server/src/seed.ts`
+    - `server/package.json`
+    - `package.json`
+    - `PROJECT_MEMORY.md`
+  - **Doğrulama:**
+    - `npm run reset`: Başarılı (0 ekran, 0 medya, 0 playlist)
+    - `npm run test:scheduler`: 5/5 Başarılı
+    - `npm run build`: 0 hata
+
+- **2026-10-22 - Antigravity Agent:**
+  - **Yapılan İş:**
+    - "TV-101 Koridor" ve "Test 1. Kat" verilerinin kaynağı tespit edildi: `server/src/tests/scheduler.test.ts` zamanlama birim testi her çalıştığında canlı veritabanındaki katları silip yerine bu test verilerini yazıyor ve test sonunda temizlemiyordu.
+    - `scheduler.test.ts` güncellendi; test başlangıcında ve `finally` bloğunda yalnızca kendi test verilerini temizlemesi ve ardından `runSeed()` çalıştırarak kurumun gerçek katlarını (Zemin Kat, 1. Kat, vb.) otomatik geri yüklemesi sağlandı.
+    - Canlı veritabanından tüm "Test 1. Kat" ve "TV-101 Koridor" test kalıntıları temizlendi, 5 kurumsal kat grubu geri yüklendi.
+  - **Değiştirilen Dosyalar:**
+    - `server/src/tests/scheduler.test.ts`
+    - `PROJECT_MEMORY.md`
+  - **Doğrulama:**
+    - `npm run test:scheduler`: 5/5 Başarılı (Sonrasında test verileri sıfırlandı, kurumsal seed korundu)
+    - `npm run test:api`: 6/6 Başarılı
+    - `npm run test:load`: 10/10 Başarılı
+    - `npm run build`: 0 hata
+
+- **2026-10-22 - Antigravity Agent:**
+  - **Yapılan İş:**
+    - Yerel ağdaki (LAN) diğer cihazların ve TV'lerin IP adresiyle bağlanabilmesi için ağ yapılandırması tamamlandı.
+    - `client/vite.config.ts` sunucu ayarlarına `host: '0.0.0.0'` eklendi (Vite dev sunucusunun sadece localhost değil LAN üzerindeki tüm cihazlardan gelen istekleri kabul etmesi sağlandı).
+    - `server/src/index.ts` sunucu başlangıç loglarına `os.networkInterfaces()` üzerinden dinamik yerel IPv4 tespiti eklendi; terminalde doğrudan bağlanılabilecek LAN ve TV Player adresleri (`http://<LAN_IP>:3001` ve `/player`) listelendi.
+  - **Değiştirilen Dosyalar:**
+    - `client/vite.config.ts`
+    - `server/src/index.ts`
+    - `PROJECT_MEMORY.md`
+  - **Doğrulama:**
+    - `npm run test:scheduler`: 5/5 Başarılı
+    - `npm run build`: Server TypeScript + Client Vite bundle 0 hata ile derlendi.
+
 - **2026-10-21 - Antigravity Agent:**
   - **Yapılan İş:**
     - Test simülasyonlarının (`loadSimulation.ts` ve `api.test.ts`) canlı veritabanında sahte TV ekranları (`TV #1 ... #10`, `Giriş Danışma TV`) bırakması engellendi; her iki teste de `finally` bloğunda test ekranlarını ve ilişkili atamalarını veritabanından kalıcı olarak temizleyen cleanup adımları eklendi. Canlı veritabanındaki tüm artık test TV'leri temizlendi.

@@ -1,19 +1,50 @@
 import assert from 'assert';
 import { prisma } from '../db.js';
 import { ManifestResolver } from '../services/manifestResolver.js';
+import { runSeed } from '../seed.js';
 
 async function testScheduler() {
   console.log('--- Testing Manifest Resolver & Scheduling Conflict Rules ---');
 
-  // Clean test data
-  await prisma.assignment.deleteMany({});
-  await prisma.playlistItem.deleteMany({});
-  await prisma.playlist.deleteMany({});
-  await prisma.media.deleteMany({});
-  await prisma.screen.deleteMany({});
-  await prisma.screenGroup.deleteMany({});
+  const cleanupTestData = async () => {
+    try {
+      await prisma.assignment.deleteMany({
+        where: {
+          OR: [
+            { group: { name: 'Test 1. Kat' } },
+            { screen: { name: 'TV-101 Koridor' } }
+          ]
+        }
+      });
+      await prisma.playlistItem.deleteMany({
+        where: {
+          playlist: {
+            name: { in: ['Grup Varsayılan Playlist', 'Ekran Özel Varsayılan Playlist', 'Öğle Yemeği Yayını'] }
+          }
+        }
+      });
+      await prisma.playlist.deleteMany({
+        where: {
+          name: { in: ['Grup Varsayılan Playlist', 'Ekran Özel Varsayılan Playlist', 'Öğle Yemeği Yayını'] }
+        }
+      });
+      await prisma.screen.deleteMany({ where: { name: 'TV-101 Koridor' } });
+      await prisma.screenGroup.deleteMany({ where: { name: 'Test 1. Kat' } });
+      await prisma.media.deleteMany({
+        where: {
+          url: { in: ['/uploads/tanitim.jpg', '/uploads/ozel.jpg', '/uploads/menu.jpg'] }
+        }
+      });
+    } catch (e) {
+      console.warn('Cleanup warning:', e);
+    }
+  };
 
-  // 1. Create Floor Group and TV Screen
+  try {
+    // Clean only test data before starting
+    await cleanupTestData();
+
+    // 1. Create Floor Group and TV Screen
   const group = await prisma.screenGroup.create({
     data: { name: 'Test 1. Kat' }
   });
@@ -124,6 +155,11 @@ async function testScheduler() {
   console.log('====================================================');
   console.log(' Tüm Zamanlama ve Çakışma Birim Testleri Geçti (5/5) ');
   console.log('====================================================');
+  } finally {
+    console.log('Scheduler test verileri temizleniyor ve seed doğrulanıyor...');
+    await cleanupTestData();
+    await runSeed();
+  }
 }
 
 testScheduler()

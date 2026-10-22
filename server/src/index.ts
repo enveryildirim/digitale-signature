@@ -1,5 +1,6 @@
 import http from 'http';
 import path from 'path';
+import os from 'os';
 import express from 'express';
 import cors from 'cors';
 import { config } from './config.js';
@@ -78,12 +79,25 @@ async function bootstrap() {
   }
 
   server.listen(config.port, '0.0.0.0', () => {
+    // Detect non-internal local IPv4 address
+    let localIp = '127.0.0.1';
+    const interfaces = os.networkInterfaces();
+    for (const name of Object.keys(interfaces)) {
+      for (const iface of interfaces[name] || []) {
+        if (iface.family === 'IPv4' && !iface.internal) {
+          localIp = iface.address;
+          break;
+        }
+      }
+    }
+
     console.log(`=======================================================`);
     console.log(` Kurum İçi Dijital Bilgi Ekranı Sunucusu Başlatıldı `);
     console.log(` Port: ${config.port}`);
-    console.log(` Admin Paneli: http://localhost:${config.port}`);
-    console.log(` TV Player:   http://localhost:${config.port}/player`);
-    console.log(` API:         http://localhost:${config.port}/api`);
+    console.log(` Yerel (Bu Cihaz): http://localhost:${config.port}`);
+    console.log(` Yerel Ağ (LAN):   http://${localIp}:${config.port}`);
+    console.log(` TV Player (LAN):  http://${localIp}:${config.port}/player`);
+    console.log(` API (LAN):        http://${localIp}:${config.port}/api`);
     console.log(`=======================================================`);
   });
 }

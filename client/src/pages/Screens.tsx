@@ -15,7 +15,10 @@ import {
   Search,
   Film,
   Wifi,
-  WifiOff
+  WifiOff,
+  Copy,
+  Check,
+  ExternalLink
 } from 'lucide-react';
 import { Screen, ScreenGroup, Playlist } from '../types';
 
@@ -57,6 +60,15 @@ export const Screens: React.FC<ScreensProps> = ({
   const [editName, setEditName] = useState('');
   const [editGroupId, setEditGroupId] = useState<string>('');
   const [savingEdit, setSavingEdit] = useState(false);
+  const [copiedScreenId, setCopiedScreenId] = useState<string | null>(null);
+
+  const handleCopyTvLink = (screen: Screen) => {
+    if (!screen.deviceToken) return;
+    const url = `${window.location.origin}/player?token=${encodeURIComponent(screen.deviceToken)}`;
+    navigator.clipboard.writeText(url);
+    setCopiedScreenId(screen.id);
+    setTimeout(() => setCopiedScreenId(null), 2500);
+  };
 
   // Time formatting helper
   const formatLastSeen = (isoStr?: string | null) => {
@@ -438,6 +450,8 @@ export const Screens: React.FC<ScreensProps> = ({
                             onOpenEdit={handleOpenEdit}
                             onOpenPlaylistModal={onOpenPlaylistModal}
                             formatLastSeen={formatLastSeen}
+                            onCopyTvLink={handleCopyTvLink}
+                            isCopied={copiedScreenId === screen.id}
                           />
                         ))}
                       </div>
@@ -471,6 +485,8 @@ export const Screens: React.FC<ScreensProps> = ({
                           onOpenEdit={handleOpenEdit}
                           onOpenPlaylistModal={onOpenPlaylistModal}
                           formatLastSeen={formatLastSeen}
+                          onCopyTvLink={handleCopyTvLink}
+                          isCopied={copiedScreenId === screen.id}
                         />
                       ))}
                   </div>
@@ -494,6 +510,8 @@ export const Screens: React.FC<ScreensProps> = ({
                   onOpenEdit={handleOpenEdit}
                   onOpenPlaylistModal={onOpenPlaylistModal}
                   formatLastSeen={formatLastSeen}
+                  onCopyTvLink={handleCopyTvLink}
+                  isCopied={copiedScreenId === screen.id}
                 />
               ))}
             </div>
@@ -720,6 +738,58 @@ export const Screens: React.FC<ScreensProps> = ({
                 </select>
               </div>
 
+              {/* Persistent TV Link Section */}
+              {editingScreen.isPaired && editingScreen.deviceToken && (
+                <div className="bg-sky-950/40 border border-sky-800/60 p-3 rounded-xl space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-sky-300 flex items-center gap-1.5">
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      Kalıcı TV Oynatıcı Bağlantısı
+                    </span>
+                    <span className="text-[10px] bg-sky-900/80 text-sky-300 px-2 py-0.5 rounded-full font-mono font-bold">
+                      Sabit Cihaz
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 leading-relaxed">
+                    Bu bağlantıyı TV tarayıcısına girdiğinizde sekme kapansa dahi daima bu TV olarak açılır, yeni TV üretmez.
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={`${window.location.origin}/player?token=${encodeURIComponent(editingScreen.deviceToken)}`}
+                      className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-xs font-mono text-slate-200 focus:outline-none select-all"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleCopyTvLink(editingScreen)}
+                      className="px-3 py-1.5 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1 shrink-0 transition"
+                    >
+                      {copiedScreenId === editingScreen.id ? (
+                        <>
+                          <Check className="w-3.5 h-3.5" />
+                          Kopyalandı
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5" />
+                          Kopyala
+                        </>
+                      )}
+                    </button>
+                    <a
+                      href={`/player?token=${encodeURIComponent(editingScreen.deviceToken)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition shrink-0"
+                      title="TV'yi Yeni Sekmede Aç"
+                    >
+                      <ExternalLink className="w-4 h-4 text-emerald-400" />
+                    </a>
+                  </div>
+                </div>
+              )}
+
               {/* Device Tech Info */}
               <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800/80 space-y-1.5 text-[11px] text-slate-400 font-mono">
                 <div className="flex justify-between">
@@ -812,6 +882,8 @@ interface ScreenCardProps {
   onOpenEdit: (screen: Screen) => void;
   onOpenPlaylistModal?: () => void;
   formatLastSeen: (isoStr?: string | null) => string;
+  onCopyTvLink?: (screen: Screen) => void;
+  isCopied?: boolean;
 }
 
 const ScreenCard: React.FC<ScreenCardProps> = ({
@@ -823,7 +895,9 @@ const ScreenCard: React.FC<ScreenCardProps> = ({
   onPreviewScreen,
   onOpenEdit,
   onOpenPlaylistModal,
-  formatLastSeen
+  formatLastSeen,
+  onCopyTvLink,
+  isCopied
 }) => {
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col justify-between hover:border-slate-700 transition shadow-lg group">
@@ -868,6 +942,36 @@ const ScreenCard: React.FC<ScreenCardProps> = ({
               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-950/60 text-amber-400 border border-amber-800">
                 KOD: {screen.pairingCode}
               </span>
+            )}
+
+            {screen.isPaired && screen.deviceToken && onCopyTvLink && (
+              <>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onCopyTvLink(screen);
+                  }}
+                  title="TV Kalıcı Oynatıcı Linkini Kopyala (Bu link ile daima bu TV açılır)"
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-sky-400 hover:bg-slate-800 transition"
+                >
+                  {isCopied ? (
+                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                  ) : (
+                    <Copy className="w-3.5 h-3.5" />
+                  )}
+                </button>
+                <a
+                  href={`/player?token=${encodeURIComponent(screen.deviceToken)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  title="Bu TV'yi Yeni Sekmede Başlat (Kalıcı Link)"
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-400 hover:bg-slate-800 transition"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              </>
             )}
 
             <button

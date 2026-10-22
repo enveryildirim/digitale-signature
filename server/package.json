@@ -10,6 +10,7 @@
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
     "seed": "tsx src/seed.ts",
+    "reset": "tsx src/seed.ts --reset",
     "test:scheduler": "tsx src/tests/scheduler.test.ts",
     "test:api": "tsx src/tests/api.test.ts",
     "test:load": "tsx src/tests/loadSimulation.ts"

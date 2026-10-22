@@ -1,5 +1,8 @@
 import bcrypt from 'bcryptjs';
+import fs from 'fs';
+import path from 'path';
 import { prisma } from './db.js';
+import { config } from './config.js';
 
 export async function runSeed() {
   console.log('Seeding initial database state...');
@@ -42,51 +45,50 @@ export async function runSeed() {
     console.log('✓ 5 adet kurumsal kat/alan grubu tanımlandı.');
   }
 
-  // 3. Create a sample web page announcement media if empty
-  const mediaCount = await prisma.media.count();
-  let sampleMediaId: string | null = null;
-  if (mediaCount === 0) {
-    const media = await prisma.media.create({
-      data: {
-        title: 'Kurumsal Hoş Geldiniz Duyurusu',
-        type: 'URL',
-        url: 'https://news.ycombinator.com', // fallback accessible sample page
-        duration: 15
-      }
-    });
-    sampleMediaId = media.id;
-    console.log('✓ Örnek kurumsal duyuru medyası eklendi.');
-  }
-
-  // 4. Create sample playlist if empty
-  const playlistCount = await prisma.playlist.count();
-  if (playlistCount === 0 && sampleMediaId) {
-    const playlist = await prisma.playlist.create({
-      data: {
-        name: 'Genel Kurum Yayını (Varsayılan)',
-        description: 'Tüm katlar için geçerli varsayılan bilgilendirme yayını'
-      }
-    });
-
-    await prisma.playlistItem.create({
-      data: {
-        playlistId: playlist.id,
-        mediaId: sampleMediaId,
-        order: 0,
-        duration: 15
-      }
-    });
-    console.log('✓ Örnek varsayılan oynatma listesi oluşturuldu.');
-  }
-
   console.log('Seed işlemi tamamlandı.');
 }
 
+export async function resetAllData() {
+  console.log('--- TÜM VERİLER SIFIRLANIYOR (FRESH START) ---');
+
+  // 1. Delete all relational data
+  await prisma.assignment.deleteMany({});
+  await prisma.playlistItem.deleteMany({});
+  await prisma.playlist.deleteMany({});
+  await prisma.screen.deleteMany({});
+  await prisma.media.deleteMany({});
+  await prisma.screenGroup.deleteMany({});
+  console.log('✓ Ekranlar, oynatma listeleri, zamanlama atamaları ve medyalar veritabanından silindi.');
+
+  // 2. Clean uploads folder (keep .gitkeep)
+  try {
+    if (fs.existsSync(config.uploadDir)) {
+      const files = fs.readdirSync(config.uploadDir);
+      for (const file of files) {
+        if (file !== '.gitkeep') {
+          fs.unlinkSync(path.join(config.uploadDir, file));
+        }
+      }
+      console.log('✓ uploads/ klasöründeki eski dosyalar temizlendi.');
+    }
+  } catch (err) {
+    console.warn('Uploads klasörü temizlenirken hata:', err);
+  }
+
+  // 3. Re-seed base admin and standard groups
+  await runSeed();
+  console.log('=======================================================');
+  console.log(' Sistem Sıfırdan Başlatıldı! (Tertemiz Kütüphane & Katlar) ');
+  console.log('=======================================================');
+}
+
 if (process.argv[1] && process.argv[1].endsWith('seed.ts')) {
-  runSeed()
+  const isReset = process.argv.includes('--reset');
+  const action = isReset ? resetAllData() : runSeed();
+  action
     .then(() => process.exit(0))
     .catch((err) => {
-      console.error('Seed hatası:', err);
+      console.error('Seed/Reset hatası:', err);
       process.exit(1);
     });
 }
