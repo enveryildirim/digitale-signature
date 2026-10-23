@@ -159,13 +159,15 @@ export class ManifestResolver {
         title: item.media.title,
         type: item.media.type,
         url: item.media.url,
-        duration: item.media.duration
+        duration: item.media.duration,
+        soundEnabled: item.media.soundEnabled
       }
     }));
 
+    // Ses ayarı da hash'e girer: değişince TV'ler manifesti yeniden uygular
     const contentForHash = JSON.stringify({
       playlistId: playlist.id,
-      items: formattedItems.map(i => ({ id: i.id, url: i.media.url, duration: i.duration }))
+      items: formattedItems.map(i => ({ id: i.id, url: i.media.url, duration: i.duration, sound: i.media.soundEnabled }))
     });
     const hash = crypto.createHash('md5').update(contentForHash).digest('hex');
 

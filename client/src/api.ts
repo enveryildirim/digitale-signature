@@ -133,7 +133,7 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(data)
     }),
-  updateMedia: (id: string, data: { title?: string; duration?: number; url?: string } | FormData) => {
+  updateMedia: (id: string, data: { title?: string; duration?: number; url?: string; soundEnabled?: boolean } | FormData) => {
     const isFormData = data instanceof FormData;
     return request<Media>(`/media/${id}`, {
       method: 'PUT',

@@ -35,7 +35,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
       return res.status(400).json({ error: 'Dosya yüklenmedi.' });
     }
 
-    const { title, duration } = req.body;
+    const { title, duration, soundEnabled } = req.body;
     const isVideo = req.file.mimetype.startsWith('video/');
     const type = isVideo ? 'VIDEO' : 'IMAGE';
     const relativeUrl = `/uploads/${req.file.filename}`;
@@ -47,7 +47,8 @@ router.post('/upload', upload.single('file'), async (req, res) => {
         url: relativeUrl,
         mimeType: req.file.mimetype,
         fileSize: req.file.size,
-        duration: duration ? parseInt(duration, 10) : (isVideo ? 15 : 10)
+        duration: duration ? parseInt(duration, 10) : (isVideo ? 15 : 10),
+        soundEnabled: isVideo && String(soundEnabled) === 'true'
       }
     });
 
@@ -92,7 +93,7 @@ router.post('/url', async (req, res) => {
 router.put('/:id', upload.single('file'), async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, duration, url } = req.body;
+    const { title, duration, url, soundEnabled } = req.body;
 
     const existingMedia = await prisma.media.findUnique({ where: { id } });
     if (!existingMedia) {
@@ -112,6 +113,11 @@ router.put('/:id', upload.single('file'), async (req, res) => {
       if (!isNaN(parsed) && parsed > 0) {
         updateData.duration = parsed;
       }
+    }
+
+    // Update sound setting (JSON boolean or multipart 'true'/'false')
+    if (soundEnabled !== undefined) {
+      updateData.soundEnabled = String(soundEnabled) === 'true';
     }
 
     // Replace file if new file uploaded
@@ -134,6 +140,9 @@ router.put('/:id', upload.single('file'), async (req, res) => {
       updateData.url = `/uploads/${req.file.filename}`;
       updateData.mimeType = req.file.mimetype;
       updateData.fileSize = req.file.size;
+      if (!isVideo) {
+        updateData.soundEnabled = false;
+      }
     } else if (url !== undefined && url.trim()) {
       // If URL media or updating url
       try {

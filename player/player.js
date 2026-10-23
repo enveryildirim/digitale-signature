@@ -375,6 +375,10 @@
       const assetUrls = playlistItems.map(item => item.media.url);
       precacheAssets(assetUrls);
 
+      // Ses ayarı anında uygulanır
+      const v = document.querySelector('.active video'), it = playlistItems[currentIndex];
+      if (v && it && v.src.endsWith(it.media.url)) v.muted = isPreview || !it.media.soundEnabled;
+
       // Start synchronized playback (ensuring preview shows what TV is playing right now!)
       if (currentIndex === -1 || !itemTimer) {
         startSyncedPlayback();
@@ -456,6 +460,10 @@
       outgoingSlot.classList.remove('active');
       activeSlot = activeSlot === 'a' ? 'b' : 'a';
 
+      // Eski video sussun
+      const ov = outgoingSlot.querySelector('video');
+      if (ov) ov.muted = true;
+
       // Clear outgoing slot after transition
       setTimeout(() => {
         outgoingSlot.innerHTML = '';
@@ -518,7 +526,8 @@
       const video = document.createElement('video');
       video.src = media.url;
       video.autoplay = true;
-      video.muted = true; // Required for reliable browser autoplay
+      // Önizleme hep sessiz
+      video.muted = isPreview || !media.soundEnabled;
       video.playsInline = true;
       video.controls = false;
 
@@ -531,7 +540,11 @@
           }
         }
         slot.appendChild(video);
-        video.play().catch(e => console.warn('Autoplay prevented:', e));
+        video.play().catch(() => {
+          // Sesli autoplay engellendi
+          video.muted = true;
+          video.play().catch(e => console.warn('Autoplay prevented:', e));
+        });
         onReady();
       };
       video.onerror = () => {

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Image, Plus, Trash2, Clock, Eye, Filter, Edit2 } from 'lucide-react';
+import { Image, Plus, Trash2, Clock, Eye, Filter, Edit2, Volume2 } from 'lucide-react';
 import { Media as MediaType } from '../types';
 import { MediaThumbnail } from '../components/MediaThumbnail';
 import { Modal } from '../components/ui/Modal';
@@ -126,6 +126,9 @@ export const Media: React.FC<MediaProps> = ({
                     <Clock className="w-3 h-3" />
                     {media.duration} sn
                     {media.fileSize ? ` · ${(media.fileSize / (1024 * 1024)).toFixed(1)} MB` : ''}
+                    {media.type === 'VIDEO' && media.soundEnabled && (
+                      <Volume2 className="w-3 h-3 ml-1 text-sky-400" aria-label="Sesli" />
+                    )}
                   </p>
                 </div>
                 <div className="flex items-center shrink-0 -mr-1">

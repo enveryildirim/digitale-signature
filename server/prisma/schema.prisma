@@ -54,6 +54,7 @@ model Media {
   mimeType  String?
   fileSize  Int?           // bytes
   duration  Int            @default(10) // default seconds
+  soundEnabled Boolean     @default(false) // VIDEO: TV'de sesli oynat
   items     PlaylistItem[]
   createdAt DateTime       @default(now())
   updatedAt DateTime       @updatedAt

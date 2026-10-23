@@ -279,7 +279,7 @@ export const App: React.FC = () => {
     loadAllData();
   };
 
-  const handleUpdateMedia = async (id: string, data: { title?: string; duration?: number; url?: string } | FormData) => {
+  const handleUpdateMedia = async (id: string, data: { title?: string; duration?: number; url?: string; soundEnabled?: boolean } | FormData) => {
     try {
       await api.updateMedia(id, data);
       showToast('Medya bilgileri başarıyla güncellendi.', 'success');

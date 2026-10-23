@@ -3,12 +3,13 @@ import { Edit3, AlertCircle, UploadCloud, FileVideo, FileImage, RefreshCw, Clock
 import { Modal, ModalIcon } from './ui/Modal';
 import { Media } from '../types';
 import { MediaThumbnail } from './MediaThumbnail';
+import { SoundToggle } from './ui/SoundToggle';
 
 interface MediaEditModalProps {
   isOpen: boolean;
   onClose: () => void;
   media: Media | null;
-  onUpdate: (id: string, data: { title?: string; duration?: number; url?: string } | FormData) => Promise<void>;
+  onUpdate: (id: string, data: { title?: string; duration?: number; url?: string; soundEnabled?: boolean } | FormData) => Promise<void>;
 }
 
 export const MediaEditModal: React.FC<MediaEditModalProps> = ({
@@ -20,6 +21,7 @@ export const MediaEditModal: React.FC<MediaEditModalProps> = ({
   const [title, setTitle] = useState('');
   const [duration, setDuration] = useState(10);
   const [url, setUrl] = useState('');
+  const [soundEnabled, setSoundEnabled] = useState(false);
   const [newFile, setNewFile] = useState<File | null>(null);
   const [isReplacingFile, setIsReplacingFile] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -31,6 +33,7 @@ export const MediaEditModal: React.FC<MediaEditModalProps> = ({
       setTitle(media.title || '');
       setDuration(media.duration || 10);
       setUrl(media.url || '');
+      setSoundEnabled(!!media.soundEnabled);
       setNewFile(null);
       setIsReplacingFile(false);
       setError(null);
@@ -38,6 +41,9 @@ export const MediaEditModal: React.FC<MediaEditModalProps> = ({
   }, [media, isOpen]);
 
   if (!isOpen || !media) return null;
+
+  // Ses ayarı yalnızca videolar için anlamlı (dosya değiştiriliyorsa yeni dosyanın türüne bakılır)
+  const isVideo = isReplacingFile && newFile ? newFile.type.startsWith('video/') : media.type === 'VIDEO';
 
   const MAX_FILE_SIZE = 200 * 1024 * 1024; // 200 MB
 
@@ -85,6 +91,7 @@ export const MediaEditModal: React.FC<MediaEditModalProps> = ({
         formData.append('file', newFile);
         formData.append('title', title.trim());
         formData.append('duration', String(duration));
+        formData.append('soundEnabled', String(isVideo && soundEnabled));
         await onUpdate(media.id, formData);
       } else if (media.type === 'URL') {
         if (!url.trim()) {
@@ -99,7 +106,8 @@ export const MediaEditModal: React.FC<MediaEditModalProps> = ({
       } else {
         await onUpdate(media.id, {
           title: title.trim(),
-          duration: Number(duration)
+          duration: Number(duration),
+          ...(isVideo && { soundEnabled })
         });
       }
 
@@ -191,6 +199,8 @@ export const MediaEditModal: React.FC<MediaEditModalProps> = ({
             required
           />
         </div>
+
+        {isVideo && <SoundToggle enabled={soundEnabled} onChange={setSoundEnabled} />}
 
         {/* URL specific field */}
         {media.type === 'URL' && (

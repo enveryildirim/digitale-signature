@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { UploadCloud, Globe, AlertCircle, FileVideo, FileImage, Type } from 'lucide-react';
 import { Modal, ModalIcon } from './ui/Modal';
+import { SoundToggle } from './ui/SoundToggle';
 
 interface MediaUploadModalProps {
   isOpen: boolean;
@@ -24,6 +25,7 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
   const [bgColor, setBgColor] = useState('#0f172a');
   const [duration, setDuration] = useState(10);
   const [url, setUrl] = useState('');
+  const [soundEnabled, setSoundEnabled] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -75,6 +77,7 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
         formData.append('file', file);
         formData.append('title', title || file.name);
         formData.append('duration', String(duration));
+        formData.append('soundEnabled', String(soundEnabled));
         await onUploadFile(formData);
       } else if (activeTab === 'url') {
         if (!title.trim() || !url.trim()) {
@@ -308,6 +311,10 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
             className="input-standard font-mono"
           />
         </div>
+
+        {activeTab === 'file' && file?.type.startsWith('video/') && (
+          <SoundToggle enabled={soundEnabled} onChange={setSoundEnabled} />
+        )}
 
         <div className="pt-3 flex items-center justify-end gap-3 border-t border-slate-800">
           <button

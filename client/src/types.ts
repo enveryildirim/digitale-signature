@@ -40,6 +40,7 @@ export interface Media {
   mimeType?: string | null;
   fileSize?: number | null;
   duration: number;
+  soundEnabled: boolean;
   _count?: { items: number };
   createdAt: string;
 }

@@ -50,5 +50,5 @@ TV'nin kendi kendine kapanmasını veya kararmasını engellemek için TV'nin ke
 ## 4. Sorun Giderme
 - **TV beyaz ekranda veya hata sayfasında kaldıysa:** TV'nin Ethernet kablosunu veya sunucu IP adresine erişimini kontrol edin.
 - **TV eşleştirme kodunu sıfırlamak için:** Tarayıcı konsolunda veya cihazda `localStorage.clear()` çalıştırıp sayfayı yenileyin.
-- **Video ses çalmıyorsa:** TV yayınları koridorlarda gürültü yapmaması için varsayılan olarak sessiz (`muted`) başlar. Kiosk komutundaki `--autoplay-policy=no-user-gesture-required` bayrağı videoların otomatik akmasını sağlar.
+- **Video ses çalmıyorsa:** Videolar varsayılan olarak sessizdir. Ses, admin panelinde **Medya → Düzenle → Sesli oynat** anahtarıyla video bazında açılır. Sesli oynatma için kiosk komutundaki `--autoplay-policy=no-user-gesture-required` bayrağı şarttır; bayrak yoksa tarayıcı sesli autoplay'i engeller ve oynatıcı videoyu sessiz olarak oynatmaya devam eder. TV'nin kendi sesinin ve HDMI ses çıkışının açık olduğunu da kontrol edin.
 
