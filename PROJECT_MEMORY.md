@@ -15,8 +15,13 @@ Bu belge, projenin mimari kararlarını, teknik altyapısını, veri modellerini
 2. **Ağ Ortamı:** Kurum içi yerel ağ (LAN / VLAN). Dış internete bağımlılık sıfırdır; tüm medya ve kütüphaneler yerel sunucudan servis edilir.
 3. **Kimlik Doğrulama:** Sade yerel oturum yönetimi. İlk kurulum varsayılan hesabı:
    - **Kullanıcı:** `admin`
-   - **Parola:** `admin123`
+   - **Parola:** `ADMIN_PASSWORD` ortam değişkeni (geliştirmede tanımlı değilse `admin123`)
    - **Rol:** `ADMIN`
+4. **Canlı Yayın (VDS + Dokploy):** Sunucu Datacasa İstanbul VDS üzerinde (Ubuntu, 4 GB RAM, 40 GB NVMe) Dokploy ile `Dockerfile` kullanılarak çalışır; HTTPS'i Traefik + Let's Encrypt sağlar. Bu sürümde TV'ler sunucuya internet üzerinden bağlanır, kesintide Service Worker önbelleği yayını sürdürür.
+   - **Zorunlu ortam değişkenleri (`NODE_ENV=production`):** `JWT_SECRET`, `ADMIN_PASSWORD`. Biri eksikse sunucu açılmaz. `ADMIN_PASSWORD` tek doğruluk kaynağıdır: değiştirip yeniden deploy etmek admin parolasını sıfırlar.
+   - **Kalıcı volume'lar:** `/app/data` (SQLite) ve `/app/uploads` (medya). Container açılırken `prisma db push --skip-generate` şemayı oluşturur; veri kaybettirecek şema değişikliğinde açılış durur.
+   - **Saat dilimi:** İmajda `TZ=Europe/Istanbul`; zamanlama motoru sunucu saatini kullanır.
+   - Firebase (sunucusuz) sürümü `firebase` dalında saklanıyor, `main`'de geri alındı.
 
 ---
 
@@ -413,3 +418,8 @@ Sistem üzerinde 3 katmanlı otomatik doğrulama testi koşturulmuştur:
     5. Grup açıklama alanı arayüzden kaldırıldı (DB kolonu ve API korunuyor).
   - **Değiştirilen Dosyalar:** `client/src/App.tsx`, `client/src/index.css`, `client/src/components/Navbar.tsx`, `client/src/components/ConfirmModal.tsx`, `client/src/components/PairScreenModal.tsx`, `client/src/components/EmergencyModal.tsx`, `client/src/components/MediaUploadModal.tsx`, `client/src/components/MediaEditModal.tsx`, `client/src/components/PlaylistModal.tsx`, `client/src/components/ScheduleModal.tsx`, `client/src/components/skeletons/PageSkeleton.tsx`, `client/src/pages/Screens.tsx`, `client/src/pages/Media.tsx`, `client/src/pages/Playlists.tsx`, `client/src/pages/Schedules.tsx`. Yeni: `client/src/components/ui/*`, `client/src/components/ScreenDetailModal.tsx`, `client/src/utils/format.ts`, `todo_ui.md`. Silinen: `client/src/pages/Dashboard.tsx`, `client/src/pages/Groups.tsx`, `client/src/components/Breadcrumbs.tsx`, `client/src/components/ScreenPreviewModal.tsx`.
   - **Doğrulama:** `npm run test:scheduler` (5/5), `npm run test:api` (tümü başarılı), `npm run test:load` (10 TV sync 502ms), `npm run build` (0 hata). Headless Chromium ile giriş → Ekranlar → TV detayı → Medya → Playlistler gezildi; hash routing, geri tuşu ve yenileme doğrulandı, konsol hatası yok, 390px mobil görünüm kontrol edildi.
+
+- **[2026-10-23] - [Claude Code]:**
+  - **Yapılan İş:** VDS + Dokploy yayınına hazırlık. `main`'e gelen Firebase commit'i (`b5cd7bc`) geri alındı, Firebase çalışması `firebase` dalında saklandı. Production için: (1) `JWT_SECRET` ve `ADMIN_PASSWORD` zorunlu hale getirildi, eksikse sunucu açılmıyor; (2) admin parolası `ADMIN_PASSWORD`'den geliyor, değer değişince açılışta güncelleniyor (arayüzde parola değiştirme ekranı yok, sıfırlama yolu bu); (3) boş volume'da tablolar oluşmuyordu, container açılışına `prisma db push` eklendi (prisma CLI için runner'a builder'ın `node_modules`'u kopyalanıyor); (4) `.dockerignore` eklendi, Mac `node_modules`'unun Linux imajına kopyalanıp build'i bozması engellendi; (5) imaja `TZ=Europe/Istanbul` eklendi; (6) `docker-compose.yml`'deki sabit JWT secret kaldırıldı.
+  - **Değiştirilen Dosyalar:** `server/src/config.ts`, `server/src/seed.ts`, `Dockerfile`, `docker-compose.yml`, `.dockerignore` (yeni), `PROJECT_MEMORY.md`
+  - **Doğrulama:** `npm run test:scheduler` (5/5), `npm run test:api` (tümü başarılı), `npm run test:load` (10 TV sync 502ms), `npm run build` (0 hata). `docker build --platform linux/amd64` başarılı. Container testleri: env eksikken açılmıyor; boş volume'da şema + admin + gruplar oluşuyor; `admin123` reddediliyor, `ADMIN_PASSWORD` ile giriş başarılı; env değişince parola güncelleniyor; restart sonrası veri korunuyor; container saati GMT+0300; `/` ve `/player/` 200 dönüyor.

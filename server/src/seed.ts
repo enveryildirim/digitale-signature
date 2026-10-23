@@ -7,13 +7,13 @@ import { config } from './config.js';
 export async function runSeed() {
   console.log('Seeding initial database state...');
 
-  // 1. Create or ensure default admin user: admin / admin123
+  // 1. Create or ensure default admin user (parola: ADMIN_PASSWORD, yoksa admin123)
   const existingAdmin = await prisma.user.findFirst({
     where: { username: 'admin' }
   });
 
   if (!existingAdmin) {
-    const passwordHash = await bcrypt.hash('admin123', 10);
+    const passwordHash = await bcrypt.hash(config.adminPassword, 10);
     await prisma.user.create({
       data: {
         username: 'admin',
@@ -23,7 +23,14 @@ export async function runSeed() {
         passwordHash
       }
     });
-    console.log('✓ Varsayılan yönetici hesabı oluşturuldu (Kullanıcı: admin / Parola: admin123)');
+    console.log('✓ Yönetici hesabı oluşturuldu (Kullanıcı: admin)');
+  } else if (process.env.ADMIN_PASSWORD && !(await bcrypt.compare(process.env.ADMIN_PASSWORD, existingAdmin.passwordHash))) {
+    // ADMIN_PASSWORD tek doğruluk kaynağıdır: değiştirip yeniden başlatmak parolayı sıfırlar
+    await prisma.user.update({
+      where: { id: existingAdmin.id },
+      data: { passwordHash: await bcrypt.hash(process.env.ADMIN_PASSWORD, 10) }
+    });
+    console.log('✓ Yönetici parolası ADMIN_PASSWORD ile güncellendi.');
   } else {
     console.log('✓ Yönetici hesabı zaten mevcut.');
   }

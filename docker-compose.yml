@@ -10,7 +10,9 @@ services:
     environment:
       - PORT=3001
       - DATABASE_URL=file:/app/data/signage.db
-      - JWT_SECRET=kurum-dijital-bilgi-ekrani-secret-key-2026
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET tanimlanmali}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:?ADMIN_PASSWORD tanimlanmali}
+      - TZ=Europe/Istanbul
       - UPLOAD_DIR=/app/uploads
       - NODE_ENV=production
     volumes:
