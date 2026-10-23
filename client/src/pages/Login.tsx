@@ -8,8 +8,8 @@ interface LoginProps {
 }
 
 export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const [username, setUsername] = useState('admin');
+  const [password, setPassword] = useState('admin123');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -23,10 +23,10 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       localStorage.setItem('signage_user', JSON.stringify(data.user));
       onLoginSuccess(data.user, data.token);
     } catch (err: any) {
-      if (err.message && (err.message.includes('fetch') || err.message.includes('yapılandırma'))) {
-        setError('Sunucuya bağlanılamadı. Lütfen internet bağlantınızı kontrol edin.');
+      if (err.message && err.message.includes('fetch')) {
+        setError('Sunucuya bağlanılamadı. Lütfen sunucunun çalıştığını ve ağ bağlantınızı kontrol edin.');
       } else {
-        setError(err.message || 'E-posta veya parola hatalı.');
+        setError(err.message || 'Kullanıcı adı veya parola hatalı.');
       }
     } finally {
       setLoading(false);
@@ -54,18 +54,17 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-xs font-medium text-slate-300 mb-1.5">
-              E-posta <span className="text-rose-400">*</span>
+              Kullanıcı Adı <span className="text-rose-400">*</span>
             </label>
             <div className="relative">
               <UserIcon className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
               <input
-                type="email"
-                autoComplete="username"
+                type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 required
                 className="input-standard pl-10"
-                placeholder="yonetici@kurum.edu.tr"
+                placeholder="admin"
                 autoFocus
               />
             </div>
@@ -106,6 +105,10 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                 </>
               )}
             </button>
+          </div>
+
+          <div className="mt-5 p-3.5 rounded-xl bg-slate-950/70 border border-slate-800/80 text-xs text-slate-400 text-center">
+            Varsayılan Yerel Giriş: <span className="text-sky-400 font-mono font-bold">admin</span> / <span className="text-sky-400 font-mono font-bold">admin123</span>
           </div>
         </form>
       </div>

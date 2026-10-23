@@ -124,7 +124,6 @@ export const App: React.FC = () => {
   };
 
   const handleLogout = () => {
-    api.logout().catch((err) => console.warn('Çıkış hatası:', err));
     localStorage.removeItem('signage_auth_token');
     localStorage.removeItem('signage_user');
     setUser(null);

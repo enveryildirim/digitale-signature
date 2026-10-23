@@ -42,12 +42,12 @@ export const ScreenDetailModal: React.FC<ScreenDetailModalProps> = ({
   }, [screen?.id]);
 
   const playerLink = screen?.deviceToken
-    ? `${window.location.origin}/player/?token=${encodeURIComponent(screen.deviceToken)}`
+    ? `${window.location.origin}/player?token=${encodeURIComponent(screen.deviceToken)}`
     : null;
 
   // Stable src so the preview does not restart on every parent re-render
   const previewSrc = useMemo(
-    () => (screen?.deviceToken ? `/player/?preview=true&token=${screen.deviceToken}&_t=${Date.now()}` : null),
+    () => (screen?.deviceToken ? `/player?preview=true&token=${screen.deviceToken}&_t=${Date.now()}` : null),
     [screen?.id, screen?.deviceToken]
   );
 

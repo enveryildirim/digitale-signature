@@ -33,8 +33,3 @@ logs/
 # OS generated files
 .DS_Store
 Thumbs.db
-
-# Firebase CLI
-.firebase/
-firebase-debug.log
-database-debug.log

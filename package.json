@@ -1,25 +1,25 @@
 {
   "name": "tv-broadcast-system",
-  "version": "2.0.0",
-  "description": "Kurum İçi Dijital Bilgi Ekranı (Digital Signage) Sistemi - Firebase sürümü",
+  "version": "1.0.0",
+  "description": "Kurum İçi Dijital Bilgi Ekranı (Digital Signage) Sistemi",
   "private": true,
   "scripts": {
-    "dev": "npm --prefix client run dev",
-    "build": "npm --prefix client run build",
-    "deploy": "npm run build && npx firebase-tools deploy",
-    "deploy:rules": "npx firebase-tools deploy --only database,storage",
-    "test:scheduler": "node tests/scheduler.test.mjs",
-    "test:api": "node tests/player.test.mjs",
-    "test:load": "node tests/loadSimulation.mjs"
-  },
-  "engines": {
-    "node": ">=22.18"
+    "dev:server": "npm --prefix server run dev",
+    "dev:client": "npm --prefix client run dev",
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "build:server": "npm --prefix server run build",
+    "build:client": "npm --prefix client run build",
+    "build": "npm run build:server && npm run build:client",
+    "start": "npm --prefix server start",
+    "reset": "npm --prefix server run reset",
+    "test:scheduler": "npm --prefix server run test:scheduler",
+    "test:api": "npm --prefix server run test:api",
+    "test:load": "npm --prefix server run test:load"
   },
   "keywords": [
     "digital-signage",
     "kiosk",
-    "tv-broadcast",
-    "firebase"
+    "tv-broadcast"
   ],
   "author": "",
   "license": "ISC"

@@ -1,20 +1,13 @@
-const CACHE_NAME = 'signage-player-v2';
+const CACHE_NAME = 'signage-player-v1';
 const MEDIA_CACHE = 'signage-media-v1';
 
 const STATIC_ASSETS = [
   './',
   './index.html',
   './style.css',
-  './resolver.js',
   './player.js',
-  './favicon.svg',
-  '/__/firebase/init.json'
+  './favicon.svg'
 ];
-
-// Medya Firebase Storage'dan gelir; download URL'leri token içerdiği için kalıcı önbellek anahtarı olarak uygundur
-function isMediaUrl(url) {
-  return url.hostname === 'firebasestorage.googleapis.com' || url.pathname.startsWith('/uploads/');
-}
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -44,9 +37,8 @@ self.addEventListener('message', (event) => {
     const urls = event.data.urls || [];
     caches.open(MEDIA_CACHE).then((cache) => {
       urls.forEach((url) => {
-        if (!url || !url.startsWith('http')) return;
-        cache.match(url).then((hit) => {
-          if (hit) return;
+        // Only cache relative upload paths or local URLs
+        if (url && (url.startsWith('/uploads') || url.startsWith('http'))) {
           fetch(url, { mode: 'cors' })
             .then((response) => {
               if (response.ok) {
@@ -54,31 +46,54 @@ self.addEventListener('message', (event) => {
               }
             })
             .catch(() => {
-              // Ignore precache failure for individual item; will retry on next manifest
+              // Ignore precache failure for individual item; will retry during playback
             });
-        });
+        }
       });
     });
   }
 });
 
 self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
 
-  // Media: cache-first, otherwise network passthrough (cached via PRECACHE_MEDIA as CORS response)
-  if (isMediaUrl(url)) {
+  // For API endpoints, prefer network, but allow fallback for manifest
+  if (url.pathname.startsWith('/api/player/manifest')) {
     event.respondWith(
-      caches.open(MEDIA_CACHE)
-        .then((cache) => cache.match(event.request.url))
-        .then((cachedResponse) => cachedResponse || fetch(event.request))
+      fetch(event.request)
+        .then((response) => {
+          if (response.ok) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          }
+          return response;
+        })
+        .catch(() => caches.match(event.request))
     );
     return;
   }
 
-  // Realtime Database stream/REST and other cross-origin calls are never cached
-  if (url.origin !== self.location.origin) return;
-  if (!url.pathname.startsWith('/player') && url.pathname !== '/__/firebase/init.json') return;
+  // For media files in /uploads/
+  if (url.pathname.startsWith('/uploads/')) {
+    event.respondWith(
+      caches.match(event.request, { cacheName: MEDIA_CACHE }).then((cachedResponse) => {
+        if (cachedResponse) {
+          return cachedResponse;
+        }
+        return fetch(event.request).then((networkResponse) => {
+          if (networkResponse.ok) {
+            const clone = networkResponse.clone();
+            caches.open(MEDIA_CACHE).then((cache) => cache.put(event.request, clone));
+          }
+          return networkResponse;
+        }).catch((err) => {
+          // If network failed and not cached
+          return cachedResponse || Promise.reject(err);
+        });
+      })
+    );
+    return;
+  }
 
   // Default stale-while-revalidate for static player files
   event.respondWith(
