@@ -1,6 +1,8 @@
-// Kurum İçi Dijital Bilgi Ekranı - Kiosk Player Client (v1.0.0)
+// Kurum İçi Dijital Bilgi Ekranı - Kiosk Player Client (v2.0.0, Firebase)
 (function () {
   'use strict';
+
+  const PLAYER_VERSION = '2.0.0';
 
   // State Variables
   const urlParams = new URLSearchParams(window.location.search);
@@ -8,19 +10,20 @@
   const isPreview = urlParams.get('preview') === 'true';
 
   let deviceToken = paramToken || localStorage.getItem('signage_device_token') || null;
-  let currentScreenId = localStorage.getItem('signage_screen_id') || null;
+  let dbUrl = null;
+  let device = readCache('signage_device_cache');
+  let emergency = readCache('signage_emergency_cache');
+  let livePlayback = null;
+  let lastSync = null;
   let activeManifest = null;
   let playlistItems = [];
   let currentIndex = -1;
   let itemTimer = null;
   let heartbeatTimer = null;
-  let pollingTimer = null;
-  let ws = null;
   let wakeLock = null;
   let activeSlot = 'a'; // 'a' or 'b' for double-buffering
 
   // DOM Elements
-  const container = document.getElementById('player-container');
   const slotA = document.getElementById('slot-a');
   const slotB = document.getElementById('slot-b');
   const idleScreen = document.getElementById('idle-screen');
@@ -33,6 +36,25 @@
   const statusPill = document.getElementById('status-pill');
 
   // Helpers
+  // Preview iframe'i admin tarayıcısında çalışır; TV önbelleğine dokunmaz
+  function readCache(key) {
+    if (isPreview) return null;
+    try {
+      return JSON.parse(localStorage.getItem(key) || 'null');
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function writeCache(key, value) {
+    if (isPreview) return;
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+    } catch (e) {
+      console.warn('LocalStorage save error:', e);
+    }
+  }
+
   function showStatus(text, duration = 3000) {
     if (!statusPill || isPreview) return;
     statusPill.textContent = text;
@@ -89,10 +111,9 @@
     if (nextReload <= now) {
       nextReload.setDate(nextReload.getDate() + 1);
     }
-    const delay = nextReload.getTime() - now.getTime();
     setTimeout(() => {
       window.location.reload();
-    }, delay);
+    }, nextReload.getTime() - now.getTime());
   }
 
   // Service Worker Registration for Offline Caching
@@ -117,215 +138,214 @@
     }
   }
 
+  // --- Firebase Realtime Database (REST + EventSource, SDK'sız) ---
+  // Hosting'in otomatik sunduğu /__/firebase/init.json'dan databaseURL okunur; offline açılış için saklanır.
+  async function loadConfig() {
+    try {
+      const res = await fetch('/__/firebase/init.json');
+      if (res.ok) {
+        const cfg = await res.json();
+        if (cfg.databaseURL) {
+          localStorage.setItem('signage_db_url', cfg.databaseURL);
+          return cfg.databaseURL;
+        }
+      }
+    } catch (e) {
+      console.warn('Firebase config fetch failed, using cached:', e);
+    }
+    return localStorage.getItem('signage_db_url');
+  }
+
+  function dbWrite(method, path, body, keepalive) {
+    return fetch(`${dbUrl}/${path}.json`, {
+      method: method,
+      body: JSON.stringify(body),
+      keepalive: Boolean(keepalive)
+    });
+  }
+
+  function setIn(obj, segs, data) {
+    if (segs.length === 0) return data;
+    const out = Object.assign({}, obj && typeof obj === 'object' ? obj : {});
+    const value = setIn(out[segs[0]], segs.slice(1), data);
+    if (value === null || value === undefined) delete out[segs[0]];
+    else out[segs[0]] = value;
+    return Object.keys(out).length ? out : null;
+  }
+
+  // Streams a path; keeps a local mirror of put/patch events. EventSource reconnects by itself.
+  function dbStream(path, onValue) {
+    let value = null;
+    const es = new EventSource(`${dbUrl}/${path}.json`);
+    const segs = (p) => p.split('/').filter(Boolean);
+    es.addEventListener('put', (e) => {
+      const msg = JSON.parse(e.data);
+      value = setIn(value, segs(msg.path), msg.data);
+      onValue(value);
+    });
+    es.addEventListener('patch', (e) => {
+      const msg = JSON.parse(e.data);
+      Object.keys(msg.data || {}).forEach((key) => {
+        value = setIn(value, segs(msg.path).concat(segs(key)), msg.data[key]);
+      });
+      onValue(value);
+    });
+    es.addEventListener('cancel', () => {
+      console.warn('Stream cancelled (permission):', path);
+      es.close();
+    });
+    return es;
+  }
+
+  function generatePairingCode() {
+    // Karıştırılabilen karakterler yok (0, O, 1, I)
+    const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+    const bytes = crypto.getRandomValues(new Uint8Array(6));
+    return Array.from(bytes, (b) => chars[b % chars.length]).join('');
+  }
+
+  function generateDeviceToken() {
+    const bytes = crypto.getRandomValues(new Uint8Array(24));
+    return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  }
+
   // --- Registration & Pairing Flow (SCR-1, SCR-2) ---
   async function startPairingFlow() {
     idleScreen.classList.add('hidden');
     pairingScreen.classList.remove('hidden');
     pairingStatusText.textContent = 'Eşleştirme kodu alınıyor...';
 
-    try {
-      const res = await fetch('/api/player/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userAgent: navigator.userAgent,
-          screenResolution: `${window.screen.width}x${window.screen.height}`
-        })
-      });
+    if (!deviceToken) {
+      deviceToken = generateDeviceToken();
+      localStorage.setItem('signage_device_token', deviceToken);
+    }
 
+    try {
+      const code = generatePairingCode();
+      const res = await dbWrite('PUT', `pairing/${code}`, {
+        token: deviceToken,
+        createdAt: { '.sv': 'timestamp' },
+        userAgent: navigator.userAgent.slice(0, 200),
+        resolution: `${window.screen.width}x${window.screen.height}`
+      });
+      if (res.status === 401 || res.status === 403) {
+        // Kod çakışması: yeni kod üret
+        startPairingFlow();
+        return;
+      }
       if (!res.ok) throw new Error('Kayıt isteği başarısız.');
 
-      const data = await res.json();
-      currentScreenId = data.screenId;
-      localStorage.setItem('signage_screen_id', currentScreenId);
-      pairingCodeDisplay.textContent = data.pairingCode || '------';
+      pairingCodeDisplay.textContent = code;
       pairingStatusText.textContent = 'Panele kodun girilmesi bekleniyor...';
 
-      connectWebSocketForPairing(data.screenId);
-
-      if (pollingTimer) clearInterval(pollingTimer);
-      pollingTimer = setInterval(async () => {
-        try {
-          const statusRes = await fetch(`/api/player/check-pair/${data.screenId}`);
-          if (statusRes.ok) {
-            const statusData = await statusRes.json();
-            if (statusData.isPaired && statusData.deviceToken) {
-              onPairingSuccess(statusData.deviceToken, statusData.screenName);
-            }
-          }
-        } catch (e) {
-          // ignore
+      const es = dbStream(`devices/${deviceToken}`, (value) => {
+        if (value && value.screenId) {
+          es.close();
+          onPairingSuccess(value);
         }
-      }, 5000);
-
+      });
     } catch (err) {
       pairingStatusText.textContent = 'Sunucuya bağlanılamadı. Tekrar deneniyor...';
       setTimeout(startPairingFlow, 10000);
     }
   }
 
-  function connectWebSocketForPairing(screenId) {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws/player?screenId=${screenId}`;
-
-    try {
-      const pairingWs = new WebSocket(wsUrl);
-      pairingWs.onmessage = (event) => {
-        try {
-          const msg = JSON.parse(event.data);
-          if (msg.action === 'PAIRED' && msg.deviceToken) {
-            pairingWs.close();
-            onPairingSuccess(msg.deviceToken, msg.screenName);
-          }
-        } catch (e) {
-          console.error(e);
-        }
-      };
-    } catch (e) {
-      console.warn('Pairing WS connection failed:', e);
-    }
-  }
-
-  function onPairingSuccess(token, screenName) {
-    if (pollingTimer) {
-      clearInterval(pollingTimer);
-      pollingTimer = null;
-    }
-    deviceToken = token;
-    localStorage.setItem('signage_device_token', deviceToken);
+  function onPairingSuccess(value) {
+    localStorage.setItem('signage_paired', '1');
+    device = value;
+    writeCache('signage_device_cache', device);
     showStatus('Ekran başarıyla eşleştirildi!');
     pairingScreen.classList.add('hidden');
     startPlayer();
   }
 
   // --- Main Player Logic ---
-  async function startPlayer() {
+  function startPlayer() {
     pairingScreen.classList.add('hidden');
-    connectWebSocket();
-    startHeartbeat();
-    await fetchManifestAndSync();
 
-    // Fallback polling every 30s in case WebSocket drops
-    if (pollingTimer) clearInterval(pollingTimer);
-    pollingTimer = setInterval(fetchManifestAndSync, 30000);
+    // Cached state first: internet yokken de yayın hemen başlar
+    evaluate();
+
+    dbStream(`devices/${deviceToken}`, (value) => {
+      if (value === null) {
+        handleUnpair();
+        return;
+      }
+      if (lastSync !== null && value.sync !== lastSync) {
+        console.log('Instant manifest sync triggered by admin.');
+        activeManifest = null;
+        currentIndex = -1;
+      }
+      lastSync = value.sync || 0;
+      device = value;
+      writeCache('signage_device_cache', device);
+      evaluate();
+    });
+
+    dbStream('emergency', (value) => {
+      emergency = value;
+      writeCache('signage_emergency_cache', emergency);
+      evaluate();
+    });
+
+    if (isPreview) {
+      dbStream(`telemetry/${deviceToken}/playback`, (state) => {
+        livePlayback = state;
+        followLivePlayback();
+      });
+    } else {
+      sendHeartbeat();
+    }
+
+    // Zaman pencereli kurallar için periyodik yeniden değerlendirme + heartbeat (PLR-4)
+    if (heartbeatTimer) clearInterval(heartbeatTimer);
+    heartbeatTimer = setInterval(() => {
+      evaluate();
+      sendHeartbeat();
+    }, 30000);
   }
 
-  // WebSocket Connection for instant updates (PLR-2) and Live Playback Sync (SCR-6)
-  function connectWebSocket() {
-    if (!deviceToken) return;
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const previewParam = isPreview ? '&preview=true' : '';
-    const wsUrl = `${protocol}//${window.location.host}/ws/player?token=${encodeURIComponent(deviceToken)}${previewParam}`;
-
-    try {
-      ws = new WebSocket(wsUrl);
-
-      ws.onopen = () => {
-        console.log('Player WebSocket connected. isPreview:', isPreview);
-        if (!isPreview) {
-          sendHeartbeat();
-        }
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const msg = JSON.parse(event.data);
-          if (msg.action === 'SYNC_MANIFEST') {
-            console.log('Instant manifest sync triggered via WebSocket.');
-            fetchManifestAndSync();
-          } else if (msg.action === 'PLAYBACK_STATUS') {
-            // Preview Client: synchronize immediately with the real TV!
-            if (isPreview && playlistItems.length > 0) {
-              const targetIdx = msg.currentIndex;
-              if (targetIdx >= 0 && targetIdx < playlistItems.length && targetIdx !== currentIndex) {
-                const elapsedSec = msg.startedAt ? Math.max(0, (Date.now() - msg.startedAt) / 1000) : 0;
-                playItemAtIndex(targetIdx, elapsedSec);
-              }
-            }
-          } else if (msg.action === 'UNPAIR') {
-            handleUnpair();
-          }
-        } catch (e) {
-          console.error('WS message error:', e);
-        }
-      };
-
-      ws.onclose = () => {
-        if (!isPreview) {
-          console.log('WS closed. Reconnecting in 5s...');
-          setTimeout(connectWebSocket, 5000);
-        }
-      };
-
-      ws.onerror = (err) => {
-        console.warn('WS error:', err);
-      };
-    } catch (e) {
-      console.warn('WS create error:', e);
-      if (!isPreview) setTimeout(connectWebSocket, 10000);
+  function evaluate() {
+    if (!device) {
+      idleScreen.classList.remove('hidden');
+      return;
     }
+    applyManifest(window.SignageResolver.resolveManifest(device, emergency, new Date()));
   }
 
   function handleUnpair() {
     if (isPreview) return;
-    localStorage.removeItem('signage_device_token');
-    localStorage.removeItem('signage_screen_id');
+    ['signage_device_token', 'signage_paired', 'signage_device_cache'].forEach((k) => localStorage.removeItem(k));
     deviceToken = null;
-    currentScreenId = null;
     if (itemTimer) clearTimeout(itemTimer);
     if (heartbeatTimer) clearInterval(heartbeatTimer);
-    if (pollingTimer) clearInterval(pollingTimer);
     window.location.reload();
   }
 
-  // Heartbeat every 30s (PLR-4)
-  function startHeartbeat() {
-    if (isPreview) return;
-    if (heartbeatTimer) clearInterval(heartbeatTimer);
-    heartbeatTimer = setInterval(sendHeartbeat, 30000);
+  function sendTelemetry(extra, keepalive) {
+    if (!deviceToken || isPreview || !dbUrl) return;
+    const currentItem = playlistItems[currentIndex];
+    const payload = Object.assign({
+      lastSeen: { '.sv': 'timestamp' },
+      online: true,
+      currentMedia: currentItem ? currentItem.media.title : null,
+      playerVersion: PLAYER_VERSION
+    }, extra);
+    dbWrite('PATCH', `telemetry/${deviceToken}`, payload, keepalive).catch(() => {});
   }
 
   function sendHeartbeat() {
-    if (!deviceToken || isPreview) return;
-    const currentItem = playlistItems[currentIndex];
-    const payload = {
-      action: 'HEARTBEAT',
-      token: deviceToken,
-      currentMedia: currentItem ? currentItem.media.title : null,
-      playerVersion: '1.0.0'
-    };
-
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify(payload));
-    } else {
-      fetch('/api/player/heartbeat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      }).catch(() => {});
-    }
+    sendTelemetry({});
   }
 
-  // Manifest Resolver & Sync
-  async function fetchManifestAndSync() {
-    if (!deviceToken) return;
-
-    try {
-      const res = await fetch(`/api/player/manifest?token=${encodeURIComponent(deviceToken)}`);
-      if (res.status === 401 || res.status === 403) {
-        handleUnpair();
-        return;
-      }
-
-      if (!res.ok) throw new Error('Manifest alınamadı');
-
-      const manifest = await res.json();
-      applyManifest(manifest);
-    } catch (err) {
-      console.warn('Manifest fetch failed, continuing with cached playlist if any:', err);
-      if (playlistItems.length > 0 && currentIndex === -1) {
-        startSyncedPlayback();
-      }
+  // Preview Client: synchronize immediately with the real TV
+  function followLivePlayback() {
+    const state = livePlayback;
+    if (!state || playlistItems.length === 0) return;
+    const targetIdx = state.currentIndex;
+    if (targetIdx >= 0 && targetIdx < playlistItems.length && targetIdx !== currentIndex) {
+      const elapsedSec = state.startedAt ? Math.max(0, (Date.now() - state.startedAt) / 1000) : 0;
+      playItemAtIndex(targetIdx, elapsedSec);
     }
   }
 
@@ -340,6 +360,8 @@
         clearTimeout(itemTimer);
         itemTimer = null;
       }
+      activeManifest = null;
+      currentIndex = -1;
       if (emergencyTitle) emergencyTitle.textContent = manifest.emergency.title || 'ACİL DURUM';
       if (emergencyMessage) emergencyMessage.textContent = manifest.emergency.message || '';
       if (emergencyScreen) emergencyScreen.classList.remove('hidden');
@@ -366,19 +388,15 @@
 
     if (playlistItems.length === 0) {
       if (itemTimer) clearTimeout(itemTimer);
+      itemTimer = null;
       currentIndex = -1;
       slotA.innerHTML = '';
       slotB.innerHTML = '';
       idleScreen.classList.remove('hidden');
     } else {
       idleScreen.classList.add('hidden');
-      const assetUrls = playlistItems.map(item => item.media.url);
-      precacheAssets(assetUrls);
-
-      // Start synchronized playback (ensuring preview shows what TV is playing right now!)
-      if (currentIndex === -1 || !itemTimer) {
-        startSyncedPlayback();
-      }
+      precacheAssets(playlistItems.map(item => item.media.url));
+      startSyncedPlayback();
     }
   }
 
@@ -386,41 +404,29 @@
    * Starts playback synchronized with the physical TV or timeline wall-clock.
    * Prevents restarting from item 0 on preview!
    */
-  async function startSyncedPlayback() {
+  function startSyncedPlayback() {
     if (playlistItems.length === 0) return;
 
-    if (isPreview) {
-      try {
-        const res = await fetch(`/api/player/live-status?token=${encodeURIComponent(deviceToken)}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data.live && data.state) {
-            const elapsed = Math.max(0, (Date.now() - data.state.startedAt) / 1000);
-            if (elapsed < data.state.duration && data.state.currentIndex < playlistItems.length) {
-              console.log(`Preview: Synced with live TV at item ${data.state.currentIndex}, seek: ${elapsed.toFixed(1)}s`);
-              playItemAtIndex(data.state.currentIndex, elapsed);
-              return;
-            }
-          }
-        }
-      } catch (err) {
-        console.warn('Could not fetch live-status, using wall-clock sync:', err);
+    const state = livePlayback;
+    if (isPreview && state) {
+      const elapsed = Math.max(0, (Date.now() - state.startedAt) / 1000);
+      if (elapsed < state.duration && state.currentIndex < playlistItems.length) {
+        console.log(`Preview: Synced with live TV at item ${state.currentIndex}, seek: ${elapsed.toFixed(1)}s`);
+        playItemAtIndex(state.currentIndex, elapsed);
+        return;
       }
     }
 
     // Deterministic Timeline (Wall-Clock) Sync:
-    // Guarantees all screens and previews without live socket are at the exact same item and second
+    // Guarantees all screens and previews without live state are at the exact same item and second
     const totalDuration = playlistItems.reduce((acc, it) => acc + (it.duration || it.media.duration || 10), 0);
     if (totalDuration > 0) {
-      const nowSec = Math.floor(Date.now() / 1000);
-      const loopOffset = nowSec % totalDuration;
+      const loopOffset = Math.floor(Date.now() / 1000) % totalDuration;
       let accum = 0;
       for (let i = 0; i < playlistItems.length; i++) {
         const itemDur = playlistItems[i].duration || playlistItems[i].media.duration || 10;
         if (loopOffset >= accum && loopOffset < accum + itemDur) {
-          const elapsedInItem = loopOffset - accum;
-          console.log(`Wall-clock sync: item ${i}, elapsed: ${elapsedInItem}s`);
-          playItemAtIndex(i, elapsedInItem);
+          playItemAtIndex(i, loopOffset - accum);
           return;
         }
         accum += itemDur;
@@ -461,18 +467,17 @@
         outgoingSlot.innerHTML = '';
       }, 900);
 
-      // Report live playback to server so preview clients can follow
-      if (!isPreview && ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({
-          action: 'PLAYBACK_STATUS',
-          token: deviceToken,
+      // Report live playback so preview clients can follow
+      sendTelemetry({
+        currentMedia: item.media.title,
+        playback: {
           currentIndex: currentIndex,
           mediaId: item.media.id,
           mediaTitle: item.media.title,
           startedAt: Date.now() - (seekSeconds * 1000),
           duration: durationSeconds
-        }));
-      }
+        }
+      });
 
       // Schedule next item
       if (item.media.type === 'VIDEO') {
@@ -494,8 +499,8 @@
 
   // Play next item in cyclic sequence
   function playNextItem() {
-    const nextIdx = (currentIndex + 1) % playlistItems.length;
-    playItemAtIndex(nextIdx, 0);
+    if (playlistItems.length === 0) return;
+    playItemAtIndex((currentIndex + 1) % playlistItems.length, 0);
   }
 
   function renderMediaIntoSlot(item, slot, seekSeconds, onReady) {
@@ -557,31 +562,16 @@
     }
   }
 
-  // Notify server instantly when tab is closed or navigated away (Instant Offline)
+  // Notify instantly when tab is closed or navigated away (Instant Offline)
   function notifyOffline() {
-    if (!deviceToken || isPreview) return;
-    try {
-      const payload = JSON.stringify({ token: deviceToken });
-      if (navigator.sendBeacon) {
-        navigator.sendBeacon('/api/player/offline', new Blob([payload], { type: 'application/json' }));
-      } else {
-        fetch('/api/player/offline', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: payload,
-          keepalive: true
-        });
-      }
-    } catch {
-      // Ignore errors on unload
-    }
+    sendTelemetry({ online: false }, true);
   }
 
   window.addEventListener('beforeunload', notifyOffline);
   window.addEventListener('pagehide', notifyOffline);
 
   // --- Initialization ---
-  function init() {
+  async function init() {
     registerServiceWorker();
     requestWakeLock();
     scheduleNightlyReload();
@@ -589,20 +579,25 @@
     updateClock();
     setInterval(updateClock, 1000);
 
-    // If persistent token passed in URL, prioritize and store it
-    if (paramToken) {
-      deviceToken = paramToken;
-      try {
-        localStorage.setItem('signage_device_token', paramToken);
-      } catch (e) {
-        console.warn('LocalStorage save error:', e);
-      }
+    dbUrl = await loadConfig();
+    if (!dbUrl) {
+      // İlk açılışta ağ yoksa: config gelene kadar bekle
+      pairingScreen.classList.remove('hidden');
+      pairingStatusText.textContent = 'Sunucuya bağlanılamadı. Tekrar deneniyor...';
+      setTimeout(() => window.location.reload(), 10000);
+      return;
     }
 
-    if (!deviceToken) {
-      startPairingFlow();
-    } else {
+    // If persistent token passed in URL, prioritize and store it
+    if (paramToken && !isPreview) {
+      localStorage.setItem('signage_device_token', paramToken);
+      localStorage.setItem('signage_paired', '1');
+    }
+
+    if (isPreview || localStorage.getItem('signage_paired') === '1') {
       startPlayer();
+    } else {
+      startPairingFlow();
     }
   }
 

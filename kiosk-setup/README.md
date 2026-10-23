@@ -21,10 +21,11 @@ sudo cp setup-chromium.sh /opt/kiosk/
 sudo chmod +x /opt/kiosk/setup-chromium.sh
 ```
 
-### Adım 2: Sunucu IP Adresini Belirleyin
-`setup-chromium.sh` dosyasını çalıştırırken merkezi sunucunun yerel IP adresini parametre olarak verebilirsiniz:
+### Adım 2: Firebase Adresini Belirleyin
+`setup-chromium.sh` dosyasını çalıştırırken Firebase Hosting adresini parametre olarak verin
+(`digital-signage-kiosk.service` ve `autostart.desktop` bu adrese ayarlıdır):
 ```bash
-/opt/kiosk/setup-chromium.sh 192.168.1.50:3001
+/opt/kiosk/setup-chromium.sh https://my-first-firebase-projec-35cfc.web.app
 ```
 
 ### Adım 3: Otomatik Başlatma (Systemd Servisi)

@@ -4,6 +4,31 @@ Bu belge, projenin mimari kararlarını, teknik altyapısını, veri modellerini
 
 ---
 
+> **⚠️ `firebase` dalı:** Bu dal, sistemin sunucusuz Firebase sürümüdür. Aşağıdaki LAN/Express/SQLite anlatımı `master` dalı içindir; bu dalda geçerli mimari **Bölüm 0**'dadır. `server/`, `Dockerfile` ve `docker-compose.yml` bu dalda kullanılmaz (build/test komutları onlara dokunmaz).
+
+## 0. Firebase Dalı Mimarisi (sunucusuz)
+
+| Eski (master) | Firebase dalı |
+|---|---|
+| Express REST API + Prisma/SQLite | Admin paneli doğrudan **Realtime Database**'e yazar (`client/src/api.ts`, aynı fonksiyon imzaları). Yetki `database.rules.json` ile. |
+| `ManifestResolver` (sunucu) | Admin her değişiklikte her TV için aday atama paketi üretir (`client/src/lib/bundle.ts` → `/devices/{token}`); TV o an oynayacağını kendi saatiyle seçer (`player/resolver.js`, aynı öncelik sırası). |
+| WebSocket `SYNC_MANIFEST` / `PAIRED` / `UNPAIR` | TV, Realtime Database REST akışını SDK'sız `EventSource` ile dinler. Paket değişince anında oynatır; düğüm silinince eşleşmeyi kaldırıp yeniden yüklenir; `sync` alanı değişince oynatmayı yeniden başlatır. |
+| Heartbeat tarayıcı (90 sn) | TV 30 sn'de bir `/telemetry/{token}` yazar (`lastSeen` sunucu zamanı). Admin `lastSeen` 90 sn'den eskiyse veya `online:false` ise ÇEVRİMDIŞI gösterir. |
+| `/uploads` + multer | **Cloud Storage** (`media/`), TV'ler token'lı download URL ile okur; Service Worker önbelleğe alır. |
+| JWT + bcrypt, `admin/admin123` | **Firebase Auth** e-posta/parola + `/admins/{uid}: true` listesi. Varsayılan hesap yok. |
+| Docker / yerel Node | **Firebase Hosting**: `/` admin paneli, `/player/` TV oynatıcısı (`client/dist` + `dist/player`). Yapılandırma `/__/firebase/init.json`'dan okunur, kodda proje anahtarı yok. |
+
+**Realtime Database düğümleri:**
+- Yalnızca admin: `groups`, `screens` (`deviceToken`, `isPaired`), `media`, `playlists` (`items` dizisi gömülü), `assignments`, `admins`.
+- `emergency`: herkes okur, admin yazar.
+- `devices/{token}`: token'ı bilen okur (eski `?token=` modeli), admin yazar. `{screenId, name, groupName, bundle, sync}`.
+- `pairing/{KOD}`: TV yalnızca bir kez oluşturur (`!data.exists()`, sunucu zamanı zorunlu), yalnızca admin okur/siler. 24 saatten eski kodlar geçersiz.
+- `telemetry/{token}`: herkes okur (önizleme takibi), yalnızca `devices/{token}` varsa TV yazar; alanlar doğrulanır.
+
+**Eşleştirme akışı:** TV rastgele 48 haneli `deviceToken` + 6 haneli kod üretir → `pairing/{KOD}` yazar → `devices/{token}` akışını dinler. Admin kodu girince `screens/{id}` oluşturulur, `pairing/{KOD}` silinir, paket `devices/{token}` altına yazılır → TV anında oynatmaya başlar.
+
+**Bilinen sınırlar:** Zamanlama TV'nin yerel saatine göre çözülür (TV'lerde NTP açık olmalı). `storage.rules` RTDB'deki admin listesini okuyamaz; bu yüzden Firebase Auth'ta yeni kayıt (sign-up) kapatılmalıdır. Kurallar Firebase Emulator ile test edilmedi (Java gerekir); `tests/harness.mjs` TV'ye açık kuralları taklit eder.
+
 ## 1. Proje Özeti ve Hedefler
 
 - **Kapsam:** Kurum içinde farklı katlara yerleştirilmiş **10 adet büyük TV ekranında**, her kata veya her TV'ye özel içerik (görsel, video, kurum içi duyuru URL) yayınlayabilen merkezi dijital bilgilendirme sistemi.
@@ -413,3 +438,13 @@ Sistem üzerinde 3 katmanlı otomatik doğrulama testi koşturulmuştur:
     5. Grup açıklama alanı arayüzden kaldırıldı (DB kolonu ve API korunuyor).
   - **Değiştirilen Dosyalar:** `client/src/App.tsx`, `client/src/index.css`, `client/src/components/Navbar.tsx`, `client/src/components/ConfirmModal.tsx`, `client/src/components/PairScreenModal.tsx`, `client/src/components/EmergencyModal.tsx`, `client/src/components/MediaUploadModal.tsx`, `client/src/components/MediaEditModal.tsx`, `client/src/components/PlaylistModal.tsx`, `client/src/components/ScheduleModal.tsx`, `client/src/components/skeletons/PageSkeleton.tsx`, `client/src/pages/Screens.tsx`, `client/src/pages/Media.tsx`, `client/src/pages/Playlists.tsx`, `client/src/pages/Schedules.tsx`. Yeni: `client/src/components/ui/*`, `client/src/components/ScreenDetailModal.tsx`, `client/src/utils/format.ts`, `todo_ui.md`. Silinen: `client/src/pages/Dashboard.tsx`, `client/src/pages/Groups.tsx`, `client/src/components/Breadcrumbs.tsx`, `client/src/components/ScreenPreviewModal.tsx`.
   - **Doğrulama:** `npm run test:scheduler` (5/5), `npm run test:api` (tümü başarılı), `npm run test:load` (10 TV sync 502ms), `npm run build` (0 hata). Headless Chromium ile giriş → Ekranlar → TV detayı → Medya → Playlistler gezildi; hash routing, geri tuşu ve yenileme doğrulandı, konsol hatası yok, 390px mobil görünüm kontrol edildi.
+
+- **[2026-10-23] - [Claude Code]:**
+  - **Yapılan İş:** `firebase` dalında sunucusuz Firebase sürümü (Hosting + Realtime Database + Cloud Storage + Auth, Cloud Functions yok). Mimari Bölüm 0'da.
+    1. **Player:** WebSocket ve `/api/player/*` yerine Realtime Database REST + `EventSource` (SDK yok, `player.js` 19,6 KB). Paket ve acil durum `localStorage`'da saklanır; internet yokken yeniden açılışta yayın önbellekten sürer. Zamanlama çözümleyicisi `player/resolver.js`'e taşındı. Service Worker Firebase Storage URL'lerini önbelleğe alır, Realtime Database akışlarına dokunmaz.
+    2. **Eski player hatası düzeltildi:** Acil durum kaldırıldığında manifest hash'i aynı kaldığı için yayın yeniden başlamıyordu; artık acil durumda aktif manifest sıfırlanıyor.
+    3. **Admin paneli:** `api.ts` aynı imzalarla Firebase'e taşındı; veriler `onValue` ile canlı yerel kopyada tutulur (10 sn'lik yenileme ağdan veri indirmez). Bekleyen eşleştirme kodları "eşleşmemiş ekran" olarak listelenir. Giriş e-posta ile; varsayılan parola ipucu kaldırıldı. Çıkış Firebase oturumunu da kapatır.
+    4. **Ayar dosyaları:** `firebase.json`, `database.rules.json`, `storage.rules`, `client/.env.example`; Vite eklentisi geliştirmede `/player/` ve `/__/firebase/init.json` sunar, derlemede player'ı `client/dist/player`'a kopyalar. Kiosk betikleri Firebase adresini alır.
+    5. **Testler:** `test:scheduler` paket üretici + çözümleyiciyi eski senaryolar ve yeni durumlarla (gece yarısı, öncelik, tarih aralığı, acil durum) sınar. `test:api` ve `test:load` gerçek `player.js`'i Node vm içinde sahte DOM ve Realtime Database taklidiyle (`tests/harness.mjs`) koşturur.
+  - **Değiştirilen Dosyalar:** `player/player.js`, `player/sw.js`, `player/index.html`, `client/src/api.ts`, `client/src/App.tsx`, `client/src/pages/Login.tsx`, `client/src/components/ScreenDetailModal.tsx`, `client/vite.config.ts`, `client/package.json`, `package.json`, `.gitignore`, `kiosk-setup/*`, `PROJECT_MEMORY.md`. Yeni: `player/resolver.js`, `client/src/firebase.ts`, `client/src/lib/bundle.ts`, `client/.env.example`, `.firebaserc` (proje: `my-first-firebase-projec-35cfc`), `firebase.json`, `database.rules.json`, `storage.rules`, `tests/scheduler.test.mjs`, `tests/player.test.mjs`, `tests/loadSimulation.mjs`, `tests/harness.mjs`, `FIREBASE_KURULUM.md`.
+  - **Doğrulama:** `npm run test:scheduler` (12/12), `npm run test:api` (12/12: eşleştirme, kod çakışma kuralı, telemetry kuralı, anlık playlist değişimi, acil durum ve geri dönüş, önizleme, offline sinyali, internetsiz yeniden açılış, eşleşme kaldırma, kalıcı token bağlantısı), `npm run test:load` (10 TV eşleşme, kat bazlı sync, acil durum 10 TV'ye anında, 10/10 heartbeat, 10 TV paketi ~3,7 KB), `npm run build` (tsc + vite 0 hata; admin paketi 666 KB uyarısı Firebase SDK kaynaklı). Gerçek bir Firebase projesine deploy ve tarayıcı testi henüz yapılmadı.

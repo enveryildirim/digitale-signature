@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Kurum İçi Dijital Bilgi Ekranı - TV Kiosk Başlatma Scripti
-# Kullanım: ./setup-chromium.sh [SUNUCU_IP_VEYA_HOST]
+# Kullanım: ./setup-chromium.sh [FIREBASE_ADRESI]
+# Örnek:    ./setup-chromium.sh https://proje-id.web.app
 
-SERVER_HOST=${1:-"localhost:3001"}
-PLAYER_URL="http://${SERVER_HOST}/player"
+SERVER_URL=${1:-"https://my-first-firebase-projec-35cfc.web.app"}
+PLAYER_URL="${SERVER_URL%/}/player/"
 
 echo "=================================================="
 echo " TV Kiosk Oynatıcı Başlatılıyor..."

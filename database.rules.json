@@ -1,0 +1,74 @@
+{
+  "rules": {
+    // Yöneticiler: /admins/{uid} = true (Firebase konsolundan elle eklenir)
+    ".read": "auth != null && root.child('admins').child(auth.uid).val() === true",
+    ".write": "auth != null && root.child('admins').child(auth.uid).val() === true",
+
+    // TV'ler acil durum yayınını kimlik doğrulaması olmadan dinler
+    "emergency": {
+      ".read": true
+    },
+
+    // TV yayın paketi: deviceToken gizli anahtar gibidir (eski /api/player/manifest?token=)
+    // Üst düğüm listelenemez; yalnızca token'ı bilen okuyabilir, yalnızca admin yazar.
+    "devices": {
+      "$token": {
+        ".read": true
+      }
+    },
+
+    // Eşleşmemiş TV kendi kodunu bir kez oluşturur; kodları yalnızca admin okur/siler.
+    "pairing": {
+      "$code": {
+        ".write": "!data.exists() && newData.exists() && $code.matches(/^[2-9A-HJ-NP-Z]{6}$/)",
+        ".validate": "newData.hasChildren(['token', 'createdAt'])",
+        "token": {
+          ".validate": "newData.isString() && newData.val().matches(/^[0-9a-f]{32,64}$/)"
+        },
+        "createdAt": {
+          ".validate": "newData.val() === now"
+        },
+        "userAgent": {
+          ".validate": "newData.isString() && newData.val().length <= 200"
+        },
+        "resolution": {
+          ".validate": "newData.isString() && newData.val().length <= 20"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+
+    // TV heartbeat ve canlı oynatma durumu (önizleme takibi için herkese açık okuma)
+    "telemetry": {
+      "$token": {
+        ".read": true,
+        ".write": "root.child('devices').child($token).exists()",
+        "lastSeen": {
+          ".validate": "newData.val() === now"
+        },
+        "online": {
+          ".validate": "newData.isBoolean()"
+        },
+        "currentMedia": {
+          ".validate": "newData.isString() && newData.val().length <= 200"
+        },
+        "playerVersion": {
+          ".validate": "newData.isString() && newData.val().length <= 20"
+        },
+        "playback": {
+          "currentIndex": { ".validate": "newData.isNumber()" },
+          "mediaId": { ".validate": "newData.isString() && newData.val().length <= 64" },
+          "mediaTitle": { ".validate": "newData.isString() && newData.val().length <= 200" },
+          "startedAt": { ".validate": "newData.isNumber()" },
+          "duration": { ".validate": "newData.isNumber()" },
+          "$other": { ".validate": false }
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    }
+  }
+}
