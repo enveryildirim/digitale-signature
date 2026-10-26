@@ -41,8 +41,12 @@ export const ScreenDetailModal: React.FC<ScreenDetailModalProps> = ({
     }
   }, [screen?.id]);
 
+  // Numeric tokens get the short /tv/<code> form; legacy UUID tokens keep the long form
+  const isShortToken = !!screen?.deviceToken && /^\d+$/.test(screen.deviceToken);
   const playerLink = screen?.deviceToken
-    ? `${window.location.origin}/player?token=${encodeURIComponent(screen.deviceToken)}`
+    ? isShortToken
+      ? `${window.location.origin}/tv/${screen.deviceToken}`
+      : `${window.location.origin}/player?token=${encodeURIComponent(screen.deviceToken)}`
     : null;
 
   // Stable src so the preview does not restart on every parent re-render
@@ -170,6 +174,7 @@ export const ScreenDetailModal: React.FC<ScreenDetailModalProps> = ({
             </div>
             <p className="text-xs text-slate-400 mt-1.5">
               TV tarayıcısı bu adresle açılırsa sekme kapansa bile hep bu ekran olarak bağlanır.
+              {!isShortToken && ' Kısa numaralı adres için eşleştirmeyi sıfırlayıp TV\'yi yeniden eşleştirin.'}
             </p>
           </div>
         )}

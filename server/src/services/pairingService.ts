@@ -13,6 +13,11 @@ export function generatePairingCode(): string {
   return code;
 }
 
+// Numeric device token so it can be typed with a TV remote (e.g. /tv/48213907)
+export function generateDeviceToken(): string {
+  return String(crypto.randomInt(10_000_000, 100_000_000));
+}
+
 export class PairingService {
   /**
    * Registers a new screen or re-registers an existing one requesting a pairing code.
@@ -61,7 +66,10 @@ export class PairingService {
       throw new Error('Geçersiz veya süresi dolmuş eşleştirme kodu.');
     }
 
-    const deviceToken = crypto.randomUUID();
+    let deviceToken = generateDeviceToken();
+    while (await prisma.screen.findUnique({ where: { deviceToken } })) {
+      deviceToken = generateDeviceToken();
+    }
 
     const updated = await prisma.screen.update({
       where: { id: screen.id },

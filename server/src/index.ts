@@ -31,6 +31,11 @@ app.use('/uploads', express.static(config.uploadDir));
 const playerStaticDir = path.resolve(process.cwd(), '../player');
 app.use('/player', express.static(playerStaticDir));
 
+// Short, remote-friendly TV address: /tv/48213907 -> /player?token=48213907
+app.get('/tv/:token', (req, res) => {
+  res.redirect(`/player?token=${encodeURIComponent(req.params.token)}`);
+});
+
 // Serve favicon for root / browser requests
 const faviconPath = path.resolve(playerStaticDir, 'favicon.svg');
 app.get(['/favicon.ico', '/favicon.svg'], (_req, res) => {
