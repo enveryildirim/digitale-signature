@@ -1,0 +1,8 @@
+.gradle/
+build/
+dist/
+# İmza anahtarı repoya girmez; ayrıca yedekleyin
+keystore/
+local.properties
+.idea/
+*.iml

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- default_server derlemede build.gradle tarafından üretilir (-PserverUrl) -->
+    <string name="app_name">TV Yayın</string>
+    <string name="settings_title">TV Yayın Ayarları</string>
+    <string name="server_label">Sunucu adresi</string>
+    <string name="server_hint">https://tv.sirketiniz.com</string>
+    <string name="server_required">Sunucu adresi gerekli</string>
+    <string name="code_label">TV kodu (8 hane, isteğe bağlı)</string>
+    <string name="code_hint">Boş bırakılırsa mevcut eşleşme korunur</string>
+    <string name="save">Kaydet ve yayına dön</string>
+    <string name="android_settings">Android Ayarları</string>
+    <string name="settings_info">Cihaz IP: %1$s · Sürüm %2$s\nKod girilmezse TV ekranında eşleştirme kodu çıkar; yönetim panelinden eşleştirin.\nBu ekrana yayın sırasında Geri tuşuna art arda 5 kez basarak ulaşılır.</string>
+    <string name="load_error">Yayın sunucusuna ulaşılamıyor (%1$s)\n%2$s\n\n15 saniye sonra yeniden denenecek.\nAyarlar için Geri tuşuna art arda 5 kez basın.</string>
+    <string name="ssl_error">sertifika hatası</string>
+</resources>

@@ -2,6 +2,8 @@
 
 Bu kılavuz, kurumdaki 10 TV'ye bağlı oynatıcı cihazların (Raspberry Pi 4/5, Intel NUC / Mini PC veya Linux kurulu mini kutular) otomatik tam ekran (Kiosk) modunda başlatılması için gereken adımları içerir.
 
+> **Android TV / Google TV kullanıyorsanız** tarayıcı yerine TV'yi yayına kilitleyen uygulamayı kurun: [android-tv/README.md](android-tv/README.md). Aşağıdaki §3 (TV menüsü güç ayarları) Android TV'ler için de geçerlidir.
+
 ---
 
 ## 1. Donanım ve İşletim Sistemi Önerisi

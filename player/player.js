@@ -275,7 +275,8 @@
     if (itemTimer) clearTimeout(itemTimer);
     if (heartbeatTimer) clearInterval(heartbeatTimer);
     if (pollingTimer) clearInterval(pollingTimer);
-    window.location.reload();
+    // Drop ?token= so a deleted token can't loop reloads
+    window.location.replace(window.location.pathname);
   }
 
   // Heartbeat every 30s (PLR-4)

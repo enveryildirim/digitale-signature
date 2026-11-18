@@ -1,0 +1,34 @@
+plugins {
+    id 'com.android.application' version '8.5.2'
+}
+
+android {
+    namespace 'com.tvbroadcast.kiosk'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.tvbroadcast.kiosk'
+        minSdk 21
+        targetSdk 34
+        versionCode 1
+        versionName '1.0'
+        // İlk açılışta kullanılacak sunucu: gradle assembleRelease -PserverUrl=https://tv.sirketiniz.com
+        resValue 'string', 'default_server', (findProperty('serverUrl') ?: '').toString()
+    }
+
+    signingConfigs {
+        release {
+            // build-apk.sh ilk derlemede üretir. TV'deki uygulamayı güncellemek için aynı anahtar gerekir: yedekleyin.
+            storeFile file('keystore/release.jks')
+            storePassword 'tvyayin'
+            keyAlias 'tvyayin'
+            keyPassword 'tvyayin'
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig signingConfigs.release
+        }
+    }
+}
