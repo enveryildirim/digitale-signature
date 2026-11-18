@@ -8,7 +8,7 @@ Bu belge, projenin mimari kararlarını, teknik altyapısını, veri modellerini
 
 - **Kapsam:** Kurum içinde farklı katlara yerleştirilmiş **10 adet büyük TV ekranında**, her kata veya her TV'ye özel içerik (görsel, video, kurum içi duyuru URL) yayınlayabilen merkezi dijital bilgilendirme sistemi.
 - **Yaklaşım:** Pareto (80/20) - Etkinin %80'ini sağlayan %20'lik çekirdek özellikler (Ekran eşleştirme, kat gruplama, medya kütüphanesi, playlist, zamanlama motoru, offline önbellek, durum izleme).
-- **Yayın Platformu:** TV'lerde özel yazılım veya OS ajanı kurulmaz; TV'ye bağlı oynatıcıda (Chromium Kiosk modu) `http://<sunucu>:3001/player` URL'i açılır.
+- **Yayın Platformu:** TV'lerde özel yazılım veya OS ajanı kurulmaz; TV'ye bağlı oynatıcıda (Chromium Kiosk modu) `http://<sunucu>:3001/player` URL'i açılır. Android TV'lerde tarayıcı yerine `kiosk-setup/android-tv/` altındaki küçük WebView uygulaması (TV Yayın) aynı `/player` sayfasını açar ve TV'yi yayına kilitler.
 
 ### Kararlaştırılan Temel Parametreler
 1. **Ekran Yönü:** Yatay (Landscape 16:9 - 1080p / 4K).
@@ -74,6 +74,7 @@ tv-brodcast/
 ├── todo_ux.md                # UX yasaları, erişilebilirlik ve mikro-kopya kontrol listesi & yol haritası
 ├── PROJECT_MEMORY.md         # Kalıcı proje hafızası (bu dosya)
 ├── AGENTS.md                 # Yapay zeka ajanları çalışma yönergesi
+├── KULLANIM.md               # Yönetici paneli kısa kullanım kılavuzu (son kullanıcı için)
 ├── Dockerfile                # Üretim konteyner tanımı
 ├── docker-compose.yml        # Tek komutla dağıtım
 │
@@ -139,7 +140,16 @@ tv-brodcast/
 └── kiosk-setup/              # TV Donanımı Kiosk Kurulum Dosyaları
     ├── setup-chromium.sh             # Linux/RPi otomatik Chromium kiosk scripti
     ├── digital-signage-kiosk.service # Systemd servis dosyası
-    └── README.md                     # Kurulum ve bakım kılavuzu
+    ├── README.md                     # Kurulum ve bakım kılavuzu
+    └── android-tv/                   # Android TV kiosk uygulaması "TV Yayın" (saf Java, AndroidX yok, APK ~22 KB)
+        ├── src/main/java/com/tvbroadcast/kiosk/
+        │   ├── MainActivity.java     # Tam ekran WebView, HOME launcher, Geri kilidi, hata/yeniden deneme, otomatik geri dönüş
+        │   ├── SettingsActivity.java # Sunucu adresi + 8 haneli TV kodu (Geri x5 ile açılır)
+        │   └── BootReceiver.java     # Açılışta başlatma (launcher kapatılamayan TV'ler için yedek)
+        ├── build-apk.sh              # Docker içinde derleme (JDK 17 + Android SDK 34 + Gradle 8.7, AGP 8.5.2)
+        ├── install-tv.sh             # ADB ile kurulum: ana ekran yapma, fabrika launcher'ı kapatma, uyku kapatma
+        ├── builder.Dockerfile        # Derleme imajı (adb de içerir)
+        └── README.md                 # Derleme, TV hazırlığı, kurulum, geri alma
 ```
 
 ---
@@ -438,3 +448,19 @@ Sistem üzerinde 3 katmanlı otomatik doğrulama testi koşturulmuştur:
   - **Yapılan İş:** TV kumandasıyla yazılabilsin diye cihaz belirteci (deviceToken) UUID yerine 8 haneli sayı olarak üretiliyor (`generateDeviceToken`, çakışma kontrolüyle). Kısa adres eklendi: `/tv/<kod>` → `/player?token=<kod>` yönlendirmesi. Ekran detayındaki "Kalıcı TV bağlantısı" sayısal belirteçlerde kısa adresi gösteriyor. Eski UUID belirteçleri çalışmaya devam ediyor; kısa koda geçmek için eşleştirme sıfırlanıp TV yeniden eşleştirilmeli (modalda not var). Not: 8 hane tahmin edilebilirliği UUID'den düşük; belirteç yalnızca yayın içeriğini okumaya/heartbeat'e yetiyor, kurum içi kullanım için kabul edildi.
   - **Değiştirilen Dosyalar:** `server/src/services/pairingService.ts`, `server/src/index.ts`, `client/src/components/ScreenDetailModal.tsx`, `PROJECT_MEMORY.md`
   - **Doğrulama:** `npm run test:scheduler` (5/5), `npm run test:api` (tümü başarılı), `npm run test:load` (başarılı), `npm run build` (0 hata). `curl -I /tv/48213907` → `302 Location: /player?token=48213907`.
+
+- **[2026-10-31] - [Claude Code]:**
+  - **Yapılan İş:** Android TV'leri yayına kilitleyen kiosk uygulaması "TV Yayın" eklendi (`kiosk-setup/android-tv/`, paket `com.tvbroadcast.kiosk`, minSdk 21 / targetSdk 34). Uygulama saf Java ve tek WebView'den oluşuyor, AndroidX kullanmıyor. TV'nin ana ekranı (HOME + LEANBACK_LAUNCHER) olarak kuruluyor, açılışta yayın geliyor. Geri tuşu ve medya tuşları yayını etkilemiyor. Başka uygulamaya geçilirse 3 dakika sonra yayına dönüyor. `FLAG_KEEP_SCREEN_ON` ile ekran kararmıyor, `mediaPlaybackRequiresUserGesture=false` ile sesli autoplay çalışıyor, WebView'in gri video posteri gizleniyor. Ana sayfa yüklenemezse (ağ hatası, HTTP 4xx/5xx, SSL) ekrana neden ve adres yazılıp 15 saniyede bir yeniden deneniyor. Renderer çökerse activity yeniden kuruluyor. Ayarlar ekranı Geri tuşuna 5 kez basınca açılıyor: sunucu adresi, isteğe bağlı 8 haneli TV kodu, Android Ayarları, cihaz IP'si. TV kodu yalnızca bir kez `/player/?token=<kod>` ile iletiliyor, sonraki açılışlar düz `/player/` ile yapılıyor; böylece SW önbelleğinden offline açılış mümkün ve panelden yeniden eşleştirme sonraki açılışta ezilmiyor. Uzaktan kurulum `am start --es server/--es code` ile de yapılabiliyor. `build-apk.sh` APK'yı Docker'da (amd64) derliyor, varsayılan sunucuyu `-PserverUrl` ile gömüyor ve ilk derlemede `keystore/release.jks` üretiyor (gitignore'da; yedeklenmeli). `install-tv.sh <IP> [kod]` ADB ile APK'yı kuruyor; SYSTEM_ALERT_WINDOW izni veriyor; uyku zaman aşımlarını kapatıyor; fabrika launcher'larını (tvlauncher, launcherx, setupwraith, leanbacklauncher) devre dışı bırakıp yayını başlatıyor. Bilgisayarda adb yoksa imajdaki adb'yi kullanıyor.
+  - **Hata Düzeltmesi (player):** `?token=` içeren bir adresle (`/tv/<kod>`) açılan TV'nin eşleşmesi silinince `handleUnpair` aynı URL'yi yeniden yüklüyordu. URL'deki eski token tekrar okunduğu için manifest 401 → unpair → reload sonsuz döngüsü oluşuyordu. Artık `location.replace(pathname)` ile token'sız `/player/` açılıyor ve eşleştirme ekranı geliyor. `player.js` 20.557 bayt; 20 KiB sınırını 77 bayt aşıyor (düzeltme yorumsuz bile 5 bayt aşıyordu).
+  - **Değiştirilen Dosyalar:** `kiosk-setup/android-tv/**` (yeni), `kiosk-setup/README.md`, `player/player.js`, `PROJECT_MEMORY.md`
+  - **Doğrulama:** `npm run test:scheduler` (5/5), `npm run test:api` (tümü başarılı), `npm run test:load` (başarılı), `npm run build` (0 hata). `./build-apk.sh` başarılı: APK 21,8 KB, `apksigner verify` geçti, `aapt2 dump badging` HOME/LEANBACK/BOOT, `default_server` ve izinleri doğruladı. Önbellekli yeniden derleme 16 saniye sürdü. Headless Chromium ile `/tv/99999999` (geçersiz kod) iki gezinmede `/player/` eşleştirme ekranına düştü; döngü yok ve localStorage temiz. `install-tv.sh` ulaşılamayan IP'de anlaşılır mesajla çıkıyor. **Gerçek bir Android TV'de henüz denenmedi** (emülatör yok); launcher kapatma ve `attentive_timeout` adımları TV modeline göre doğrulanmalı.
+
+- **[2026-11-16] - [Claude Code]:**
+  - **Yapılan İş:** Son kullanıcıya yönelik kısa kullanım kılavuzu eklendi: panele giriş, 4 adımda ilk yayın (eşleştir → medya → playlist → yayına al), sekmelerin özeti, zamanlama öncelik sırası, acil durum duyurusu, offline davranış ve sık karşılaşılan sorunlar. Düğme adları paneldeki metinlerle eşleştirildi.
+  - **Değiştirilen Dosyalar:** `KULLANIM.md` (yeni), `PROJECT_MEMORY.md`
+  - **Doğrulama:** Yalnızca dokümantasyon değişikliği; kod değişmediği için testler yeniden koşturulmadı.
+
+- **[2026-11-18] - [Claude Code]:**
+  - **Hata Düzeltmesi (player SW):** Akıllı TV'de (Chrome 86) video siyah ekranda kalıyor, admin önizlemesinde 2-3 sn oynayıp sonraki öğeye geçiyordu. Önizleme TV'nin `PLAYBACK_STATUS`'unu takip ettiği için önizlemedeki atlama, TV'deki atlamanın aynısıydı. Sebep: `sw.js` cache'teki tam (200) video yanıtını `Range` isteklerine de olduğu gibi dönüyordu. Duvar saati senkronu `currentTime` ile videoyu ortadan başlatınca Chrome `bytes=X-` istiyor ve dönen 200 yanıtını reddediyordu. Video `error` veriyor, ekran siyah kalıyor ve 2 sn sonra sonraki öğeye geçiliyordu. Resimlerde Range isteği olmadığı için sorun çıkmıyordu. Düzeltme: SW, cache'teki dosyadan `blob.slice` ile `206 Partial Content` + `Content-Range` üretiyor (aralık dışı istekte 416). Ağdan gelen 206 yanıtlar artık cache'e yazılmaya çalışılmıyor; tam dosyayı `PRECACHE_MEDIA` indiriyor. Cache sorgusu URL ile yapılıyor. Test edilen video H.264 High/AAC, moov dosyanın başında; video dosyasında sorun yok.
+  - **Değiştirilen Dosyalar:** `player/sw.js`, `PROJECT_MEMORY.md`
+  - **Doğrulama:** `rangeResponse` 51 MB'lık gerçek videoyla Node'da test edildi: `bytes=0-`, `1000-1999`, `40000000-`, `-500` aralıkları bayt bayt doğru döndü, aralık dışı istek 416 verdi. `npm run test:scheduler` (5/5), `npm run test:api` (tümü başarılı), `npm run test:load` (10 TV sync 502ms), `npm run build` (0 hata). **Chrome 86 TV'de henüz denenmedi.**

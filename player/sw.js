@@ -54,6 +54,34 @@ self.addEventListener('message', (event) => {
   }
 });
 
+function rangeResponse(response, rangeHeader) {
+  return response.blob().then((blob) => {
+    const size = blob.size;
+    const m = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader.trim());
+    let start = 0;
+    let end = size - 1;
+    if (m && m[1] !== '') {
+      start = parseInt(m[1], 10);
+      if (m[2] !== '') end = Math.min(parseInt(m[2], 10), size - 1);
+    } else if (m && m[2] !== '') {
+      start = Math.max(0, size - parseInt(m[2], 10));
+    }
+    if (!m || start >= size || start > end) {
+      return new Response(null, { status: 416, headers: { 'Content-Range': 'bytes */' + size } });
+    }
+    return new Response(blob.slice(start, end + 1), {
+      status: 206,
+      statusText: 'Partial Content',
+      headers: {
+        'Content-Type': response.headers.get('Content-Type') || blob.type || 'application/octet-stream',
+        'Content-Range': 'bytes ' + start + '-' + end + '/' + size,
+        'Content-Length': String(end - start + 1),
+        'Accept-Ranges': 'bytes'
+      }
+    });
+  });
+}
+
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
@@ -75,13 +103,17 @@ self.addEventListener('fetch', (event) => {
 
   // For media files in /uploads/
   if (url.pathname.startsWith('/uploads/')) {
+    const range = event.request.headers.get('range');
     event.respondWith(
-      caches.match(event.request, { cacheName: MEDIA_CACHE }).then((cachedResponse) => {
+      caches.match(event.request.url, { cacheName: MEDIA_CACHE }).then((cachedResponse) => {
         if (cachedResponse) {
-          return cachedResponse;
+          // Video Range isteği: cache'teki tam dosyadan 206 dilimi üret
+          // (tam 200 dönmek ileri sarmada Chrome'u bozuyor -> siyah ekran)
+          return range ? rangeResponse(cachedResponse, range) : cachedResponse;
         }
         return fetch(event.request).then((networkResponse) => {
-          if (networkResponse.ok) {
+          // 206 kısmi yanıt cache'lenemez; tam dosyayı PRECACHE_MEDIA indirir
+          if (networkResponse.status === 200) {
             const clone = networkResponse.clone();
             caches.open(MEDIA_CACHE).then((cache) => cache.put(event.request, clone));
           }
