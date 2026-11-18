@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Video Tanı</title>
+<style>
+  body { margin: 0; background: #111; color: #eee; font: 18px/1.4 sans-serif; }
+  #wrap { display: flex; height: 100vh; }
+  #left { width: 55%; padding: 12px; box-sizing: border-box; }
+  #right { width: 45%; padding: 12px; box-sizing: border-box; overflow: auto; }
+  video { width: 100%; height: 50vh; background: #000; border: 2px solid #444; }
+  button { font-size: 20px; padding: 10px 14px; margin: 4px; background: #2a5; color: #fff; border: 3px solid transparent; }
+  button:focus { border-color: #ff0; outline: none; }
+  #log div { border-bottom: 1px solid #333; padding: 2px 0; font-size: 15px; word-break: break-all; }
+  .err { color: #f66; } .ok { color: #6f6; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="left">
+    <video id="v" playsinline muted></video>
+    <div id="btns"></div>
+    <div id="t"></div>
+  </div>
+  <div id="right"><div id="log"></div></div>
+</div>
+<script>
+(function () {
+  var logEl = document.getElementById('log');
+  var v = document.getElementById('v');
+  var btns = document.getElementById('btns');
+  var t = document.getElementById('t');
+  function log(msg, cls) {
+    var d = document.createElement('div');
+    d.textContent = new Date().toTimeString().slice(0, 8) + ' ' + msg;
+    if (cls) d.className = cls;
+    logEl.insertBefore(d, logEl.firstChild);
+  }
+  function btn(label, fn) {
+    var b = document.createElement('button');
+    b.textContent = label;
+    b.onclick = fn;
+    btns.appendChild(b);
+    return b;
+  }
+
+  log('UA: ' + navigator.userAgent);
+  log('Ekran: ' + screen.width + 'x' + screen.height + ' dpr ' + window.devicePixelRatio);
+  ['video/mp4; codecs="avc1.42E01E, mp4a.40.2"', 'video/mp4; codecs="avc1.64001E, mp4a.40.2"',
+   'video/mp4; codecs="avc1.640028"', 'video/webm; codecs="vp9"'].forEach(function (c) {
+    log('canPlayType ' + c + ' => "' + v.canPlayType(c) + '"');
+  });
+  log('SW kontrol ediyor mu: ' + !!(navigator.serviceWorker && navigator.serviceWorker.controller));
+
+  ['loadstart', 'loadedmetadata', 'loadeddata', 'canplay', 'playing', 'waiting', 'stalled', 'seeking', 'seeked', 'ended', 'emptied', 'abort']
+    .forEach(function (ev) {
+      v.addEventListener(ev, function () {
+        log('olay: ' + ev + ' (t=' + v.currentTime.toFixed(1) + ', boyut=' + v.videoWidth + 'x' + v.videoHeight + ', ready=' + v.readyState + ')', ev === 'playing' ? 'ok' : '');
+      });
+    });
+  v.addEventListener('error', function () {
+    var e = v.error;
+    var names = { 1: 'ABORTED', 2: 'NETWORK', 3: 'DECODE', 4: 'SRC_NOT_SUPPORTED' };
+    log('HATA: ' + (e ? e.code + ' ' + names[e.code] + ' ' + (e.message || '') : '?'), 'err');
+  });
+  setInterval(function () {
+    var dec = v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : null;
+    t.textContent = 'zaman ' + v.currentTime.toFixed(1) + ' / ' + (v.duration || 0).toFixed(1) +
+      ' | paused=' + v.paused + ' | ready=' + v.readyState + ' | network=' + v.networkState +
+      (dec ? ' | kare: ' + dec.totalVideoFrames + ' (düşen ' + dec.droppedVideoFrames + ')' : '');
+  }, 500);
+
+  function play(url, seek) {
+    log('--- Oynat: ' + url + (seek ? ' (ileri sar ' + seek + 's)' : ''));
+    v.src = url;
+    v.onloadeddata = function () {
+      if (seek) v.currentTime = seek;
+      v.onloadeddata = null;
+    };
+    var p = v.play();
+    if (p && p.catch) p.catch(function (e) { log('play() reddedildi: ' + e.name + ' ' + e.message, 'err'); });
+  }
+
+  function addVideoButtons(url) {
+    btn('SW ile baştan', function () { play(url, 0); });
+    btn('SW ile 60. sn', function () { play(url, 60); });
+    btn('SW\'siz baştan', function () { play(url + '?nosw=' + Date.now(), 0); });
+    btn('SW\'siz 60. sn', function () { play(url + '?nosw=' + Date.now(), 60); });
+  }
+
+  btn('SW + önbelleği sil', function () {
+    var jobs = [];
+    if (navigator.serviceWorker) {
+      jobs.push(navigator.serviceWorker.getRegistrations().then(function (rs) {
+        return Promise.all(rs.map(function (r) { return r.unregister(); }));
+      }));
+    }
+    if (window.caches) {
+      jobs.push(caches.keys().then(function (ks) { return Promise.all(ks.map(function (k) { return caches.delete(k); })); }));
+    }
+    Promise.all(jobs).then(function () { log('SW ve önbellek silindi. Sayfayı yenileyin.', 'ok'); })
+      .catch(function (e) { log('Silme hatası: ' + e, 'err'); });
+  });
+
+  var qs = new URLSearchParams(location.search);
+  var direct = qs.get('url');
+  if (direct) { addVideoButtons(direct); return; }
+
+  var token = qs.get('token') || localStorage.getItem('signage_device_token');
+  if (!token) { log('Token yok. Adrese ?url=/uploads/dosya.mp4 ekleyin.', 'err'); return; }
+  fetch('/api/player/manifest?token=' + encodeURIComponent(token))
+    .then(function (r) { return r.json(); })
+    .then(function (m) {
+      var items = (m.playlist && m.playlist.items) || [];
+      var vids = items.filter(function (i) { return i.media.type === 'VIDEO'; });
+      if (!vids.length) { log('Playlist\'te video yok.', 'err'); return; }
+      log('Video: ' + vids[0].media.title + ' -> ' + vids[0].media.url);
+      addVideoButtons(vids[0].media.url);
+      var first = btns.querySelector('button:nth-child(2)');
+      if (first) first.focus();
+    })
+    .catch(function (e) { log('Manifest alınamadı: ' + e, 'err'); });
+})();
+</script>
+</body>
+</html>
