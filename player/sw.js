@@ -31,29 +31,6 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Listen for messages from player client to pre-cache media assets
-self.addEventListener('message', (event) => {
-  if (event.data && event.data.action === 'PRECACHE_MEDIA') {
-    const urls = event.data.urls || [];
-    caches.open(MEDIA_CACHE).then((cache) => {
-      urls.forEach((url) => {
-        // Only cache relative upload paths or local URLs
-        if (url && (url.startsWith('/uploads') || url.startsWith('http'))) {
-          fetch(url, { mode: 'cors' })
-            .then((response) => {
-              if (response.ok) {
-                cache.put(url, response);
-              }
-            })
-            .catch(() => {
-              // Ignore precache failure for individual item; will retry during playback
-            });
-        }
-      });
-    });
-  }
-});
-
 function rangeResponse(response, rangeHeader) {
   return response.blob().then((blob) => {
     const size = blob.size;
@@ -101,6 +78,9 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Player'ın kendi indirmesi (?precache=1): doğrudan ağa, cache.put'u player yapar
+  if (url.searchParams.has('precache')) return;
+
   // For media files in /uploads/
   if (url.pathname.startsWith('/uploads/')) {
     const range = event.request.headers.get('range');
@@ -112,7 +92,7 @@ self.addEventListener('fetch', (event) => {
           return range ? rangeResponse(cachedResponse, range) : cachedResponse;
         }
         return fetch(event.request).then((networkResponse) => {
-          // 206 kısmi yanıt cache'lenemez; tam dosyayı PRECACHE_MEDIA indirir
+          // 206 kısmi yanıt cache'lenemez; tam dosyayı player indirir
           if (networkResponse.status === 200) {
             const clone = networkResponse.clone();
             caches.open(MEDIA_CACHE).then((cache) => cache.put(event.request, clone));

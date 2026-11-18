@@ -108,13 +108,39 @@
     }
   }
 
-  function precacheAssets(urls) {
-    if (!isPreview && 'serviceWorker' in navigator && navigator.serviceWorker.controller) {
-      navigator.serviceWorker.controller.postMessage({
-        action: 'PRECACHE_MEDIA',
-        urls: urls
-      });
+  // Medya sayfa tarafından sırayla, tek tek indirilir (SW uzun işte kesilebiliyor).
+  // Yavaş ağda video canlı akıtılamıyor; tam inmeden oynatılmaz.
+  const MEDIA_CACHE = 'signage-media-v1';
+  const useCache = !isPreview && 'caches' in window;
+  const pending = {};
+  const streamOk = {};
+  let dlQueue = Promise.resolve();
+  let playGen = 0;
+  let skips = 0;
+
+  function cacheMedia(url) {
+    if (!useCache || pending[url]) return;
+    pending[url] = dlQueue = dlQueue.then(() => caches.open(MEDIA_CACHE).then(c =>
+      c.match(url).then(hit => hit || fetch(url + '?precache=1').then(r => {
+        if (r.status !== 200) throw new Error(r.status);
+        // Kota dolarsa akıtarak oynatmaya izin ver
+        return c.put(url, r).catch(() => { streamOk[url] = 1; });
+      }))
+    )).catch(e => console.warn('Precache failed:', url, e)).then(() => { delete pending[url]; });
+  }
+
+  function precacheAssets(items) {
+    items.slice().sort((a, b) => (a.media.type === 'VIDEO') - (b.media.type === 'VIDEO'))
+      .forEach(it => it.media.url.startsWith('/uploads/') && cacheMedia(it.media.url));
+  }
+
+  function isReady(item) {
+    const url = item.media.url;
+    if (!useCache || item.media.type !== 'VIDEO' || streamOk[url] || !url.startsWith('/uploads/')) {
+      return Promise.resolve(true);
     }
+    return caches.match(url, { cacheName: MEDIA_CACHE })
+      .then(hit => { if (!hit) cacheMedia(url); return !!hit; }, () => true);
   }
 
   // --- Registration & Pairing Flow (SCR-1, SCR-2) ---
@@ -337,6 +363,7 @@
     const emergencyMessage = document.getElementById('emergency-message');
 
     if (manifest.emergency && manifest.emergency.active) {
+      playGen++;
       if (itemTimer) {
         clearTimeout(itemTimer);
         itemTimer = null;
@@ -366,6 +393,7 @@
     playlistItems = newItems;
 
     if (playlistItems.length === 0) {
+      playGen++;
       if (itemTimer) clearTimeout(itemTimer);
       currentIndex = -1;
       slotA.innerHTML = '';
@@ -373,8 +401,7 @@
       idleScreen.classList.remove('hidden');
     } else {
       idleScreen.classList.add('hidden');
-      const assetUrls = playlistItems.map(item => item.media.url);
-      precacheAssets(assetUrls);
+      precacheAssets(playlistItems);
 
       // Ses ayarı anında uygulanır
       const v = document.querySelector('.active video'), it = playlistItems[currentIndex];
@@ -449,6 +476,17 @@
 
     currentIndex = index % playlistItems.length;
     const item = playlistItems[currentIndex];
+    const gen = ++playGen;
+    isReady(item).then(ok => {
+      if (gen !== playGen) return;
+      if (ok) return showItem(item, seekSeconds);
+      // Video henüz inmedi: atla; hiçbir şey hazır değilse saat ekranında bekle
+      if (++skips >= playlistItems.length) idleScreen.classList.remove('hidden');
+      itemTimer = setTimeout(playNextItem, skips >= playlistItems.length ? 10000 : 0);
+    });
+  }
+
+  function showItem(item, seekSeconds) {
     const targetSlot = activeSlot === 'a' ? slotB : slotA;
     const outgoingSlot = activeSlot === 'a' ? slotA : slotB;
 
@@ -457,6 +495,8 @@
 
     renderMediaIntoSlot(item, targetSlot, seekSeconds, () => {
       // Transition complete: Cross-fade
+      skips = 0;
+      idleScreen.classList.add('hidden');
       targetSlot.classList.add('active');
       outgoingSlot.classList.remove('active');
       activeSlot = activeSlot === 'a' ? 'b' : 'a';
